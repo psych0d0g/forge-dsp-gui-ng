@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/
+
+  esp32:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('esp32/platformio.ini') }}
+      - run: pip install platformio
+      - run: pio run -d esp32
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: |
+            esp32/.pio/build/esp32dev/firmware.bin
+            esp32/.pio/build/esp32dev/bootloader.bin
+            esp32/.pio/build/esp32dev/partitions.bin

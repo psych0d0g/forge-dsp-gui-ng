@@ -1,0 +1,14 @@
+:root {
+  --bg: #f6f7f9; --fg: #1b1f24; --muted: #5b6573; --card: #ffffff; --line: #d9dee5;
+  --accent: #c2410c; --ok: #15803d; --err: #b91c1c; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --fg: #e6e9ee; --muted: #9aa4b2; --card: #1a1f25; --line: #2c333c; --accent: #fb923c; --ok: #4ade80; --err: #f87171; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+button { font: inherit; padding: .45rem .9rem; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+input { font: inherit; padding: .45rem .6rem; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }

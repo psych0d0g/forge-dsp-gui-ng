@@ -1,0 +1,27 @@
+menu "Forge bridge"
+
+config FORGE_UART_TX_GPIO
+    int "UART TX GPIO (to the transceiver DI)"
+    default 17
+config FORGE_UART_RX_GPIO
+    int "UART RX GPIO (from the transceiver RO)"
+    default 16
+config FORGE_UART_BAUD
+    int "Baud rate of the Forge RS485 port"
+    default 38400
+
+config FORGE_AP_SSID
+    string "Access point SSID"
+    default "forge-dsp"
+config FORGE_AP_PASSWORD
+    string "Access point password (8+ characters, change it)"
+    default "forge-dsp-setup"
+
+config FORGE_STA_SSID
+    string "Join this WLAN as well (empty: access point only)"
+    default ""
+config FORGE_STA_PASSWORD
+    string "Password of that WLAN"
+    default ""
+
+endmenu

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+esp32/.pio/
+esp32/web/
+esp32/sdkconfig.*
+!esp32/sdkconfig.defaults
