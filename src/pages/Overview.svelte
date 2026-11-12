@@ -21,7 +21,7 @@
     { page: "inputs" as PageId, icon: "inputs", title: "Eingänge",
       lines: [`${id.analogInPairs} analoge Paare`, `${id.spdifPairs} digital`] },
     { page: "mixer" as PageId, icon: "mixer", title: "Mixer",
-      lines: [`Position ${d.mixer.position || "–"}`, d.mixer.input !== null ? `Quelle ${d.mixer.input}` : ""] },
+      lines: [`Profil ${d.mixer.position || "–"}`, d.mixer.input !== null ? `Quelle ${d.mixer.input}` : ""] },
     { page: "filters" as PageId, icon: "filters", title: "Filter & EQ",
       lines: [`${activeBq} aktiv`, `von ${allBq.length}`] },
     { page: "delay" as PageId, icon: "delay", title: "Laufzeit",
