@@ -14,6 +14,7 @@
   import Presets from "./pages/Presets.svelte";
   import ModcPage from "./pages/Modc.svelte";
   import Firmware from "./pages/Firmware.svelte";
+  import Biquads from "./pages/Biquads.svelte";
 
   const version = __APP_VERSION__;
   const commit = __APP_COMMIT__;
@@ -26,7 +27,8 @@
     { group: "Gerät", items: [{ id: "overview", label: "Übersicht" }] },
     { group: "Signalweg", items: [
       { id: "mixer", label: "Mixer" }, { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" }] },
-    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
+    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" },
+      { id: "biquads", label: "Biquad-Verteilung" }] },
     { group: "Werkzeuge", items: [
       { id: "diagnose", label: "Diagnose" }, { id: "firmware", label: "Firmware" },
       { id: "console", label: "Konsole" }] },
@@ -142,6 +144,7 @@
     {:else if app.page === "diagnose"}<Diagnose />
     {:else if app.page === "presets"}<Presets />
     {:else if app.page === "modc"}<ModcPage />
+    {:else if app.page === "biquads"}<Biquads />
     {:else if app.page === "firmware"}<Firmware />
     {:else if app.page === "console"}<Console />
     {/if}

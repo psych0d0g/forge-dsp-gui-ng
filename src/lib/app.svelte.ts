@@ -6,7 +6,7 @@ import { openWebSocket } from "./transport/websocket";
 import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
-export type PageId = "overview" | "mixer" | "filters" | "delay" | "modc" | "presets"
+export type PageId = "overview" | "mixer" | "filters" | "delay" | "modc" | "presets" | "biquads"
   | "diagnose" | "firmware" | "console";
 
 export const app = $state({

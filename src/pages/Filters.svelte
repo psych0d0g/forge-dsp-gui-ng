@@ -1,13 +1,13 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import { app, outName, setPoolLengths, write } from "../lib/app.svelte";
+  import { channelColor } from "../lib/channelColors";
   import { isPort, limitsOf, poolOf, proposeGrow, sumsActiveAnywhere, type Biquad } from "../lib/device";
   import { isActive, typeInfo, TYPES, viewRange } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
   import Knob from "../components/Knob.svelte";
-  import PoolPanel from "../components/PoolPanel.svelte";
 
   const d = $derived(app.device);
   const lim = $derived(limitsOf(d));
@@ -27,9 +27,7 @@
   let showPhase = $state(false);
   let linked = $state(false);
   // other channels laid over the curve, each in its own colour (readable on dark and light)
-  const COLORS = ["#f59e0b", "#10b981", "#ec4899", "#a78bfa", "#22d3ee", "#ef4444", "#84cc16", "#94a3b8", "#fb7185", "#38bdf8"];
-  // the sums keep their own colours while they are hidden (All Over off), e.g. in the biquad distribution
-  const colorOf = (c: number) => (channels.includes(c) ? COLORS[channels.indexOf(c) % COLORS.length] : COLORS[(8 + c) % COLORS.length]);
+  const colorOf = channelColor;
   // ?over=3,5 starts with these channels overlaid
   let over = $state<number[]>((new URLSearchParams(location.search).get("over") ?? "").split(",").map(Number).filter((n) => n > 0));
   const overlays = $derived(over.filter((c) => c !== ch && d.biquads[c]).map((c) => ({ name: chName(c), color: colorOf(c), filters: Object.values(d.biquads[c]) })));
@@ -114,7 +112,7 @@
     const k = poolOf(d, ch)!;
     if (!g?.got) {
       alert(`Im Vorrat von Kern ${k.core} ist nichts mehr frei, und die anderen Kanäle nutzen ihre Plätze bis zum Ende.\n\n` +
-        "Unter „Biquad-Verteilung“ lassen sich Plätze von Hand verschieben.");
+        "Unter Steuerung › Biquad-Verteilung lassen sich Plätze von Hand verschieben.");
       return false;
     }
     const from = k.channels.map((c, i) => ({ c, diff: c.len - g.lengths[i] })).filter((x) => x.diff > 0 && x.c.ch !== ch)
@@ -283,7 +281,8 @@
 <!-- EQ bands -->
 <section class="panel block">
   <div class="blockhead"><h3>EQ-Bänder <span class="muted num">{bands.length}</span></h3>
-    <span class="muted small">{free} von {slots.length} Plätzen dieses Kanals frei</span></div>
+    <span class="muted small">{free} von {slots.length} Plätzen dieses Kanals frei{#if canGrow}
+      · <button class="link" onclick={() => (app.page = "biquads")}>Plätze verteilen</button>{/if}</span></div>
   <div class="strips">
     {#each bands as { n, bq } (n)}
       {@const bw = bq.type === EQ_BW}
@@ -323,13 +322,11 @@
   </div>
 </section>
 
-{#if d.pools?.length}
-  <PoolPanel {colorOf} current={ch} bind:busy={poolBusy} />
-{:else if poolBusy}
-  <p class="muted">{poolBusy}</p>
-{/if}
+{#if poolBusy}<p class="poolbusy">{poolBusy}</p>{/if}
 
 <style>
+  .poolbusy { color: var(--accent); font-size: .85rem; margin: .5rem 0; }
+  .link { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; cursor: pointer; }
   .head { margin-bottom: 1rem; }
   .chans { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .75rem; }
   .chans button { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .7rem; color: var(--muted); }

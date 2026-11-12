@@ -11,24 +11,67 @@
   } = $props();
 
   const d = $derived(app.device);
-  const cores = $derived(poolCores(d));
+  // outputs in ascending order, the signal sums always last
+  const firstCh = (k: PoolCore) => Math.min(...k.channels.map((c) => (c.ch > 30 ? 100 + c.ch : c.ch)));
+  const cores = $derived(poolCores(d).sort((a, b) => firstCh(a) - firstCh(b)));
   const name = (ch: number) => (ch === 35 ? "Summe A" : ch === 36 ? "Summe B" : outName(ch));
   const coreName = (k: PoolCore) => {
     const chs = k.channels.map((c) => c.ch).filter((c) => c < 30);
     return chs.length ? `Kern ${k.core} · Ausgänge ${Math.min(...chs)}–${Math.max(...chs)}` : `Kern ${k.core} · Summen A/B`;
   };
 
-  // edited lengths per core; the device values until something is typed
+  // edited lengths per core; the device values until something is changed
   let edit = $state<Record<number, number[]>>({});
   const lens = (k: PoolCore) => edit[k.core] ?? k.channels.map((c) => c.len);
   const changed = (k: PoolCore) => !!edit[k.core] && edit[k.core].some((n, i) => n !== k.channels[i].len);
   function set(k: PoolCore, i: number, v: number) {
     const l = [...lens(k)];
-    l[i] = Math.max(0, Math.round(v) || 0);
+    l[i] = Math.max(0, Math.min(255, Math.round(v) || 0));
     edit[k.core] = l;
   }
-  let error = $state("");
+  function typed(e: Event, k: PoolCore, i: number) {
+    const el = e.target as HTMLInputElement;
+    const v = Number(el.value.trim());
+    if (el.value.trim() && Number.isFinite(v)) set(k, i, v);
+    el.value = String(lens(k)[i]);
+  }
 
+  /**
+   * Moves the border after channel i by delta biquads: channel i takes them from its right
+   * neighbour, or after the last channel from the free ones (or gives them back there);
+   * no channel goes below its minimum.
+   */
+  function shift(k: PoolCore, start: number[], i: number, delta: number) {
+    const last = i === k.channels.length - 1;
+    const right = last ? freeOf(k, start) : start[i + 1] - Math.max(1, k.channels[i + 1].min);
+    const left = start[i] - Math.max(1, k.channels[i].min);
+    delta = Math.max(-left, Math.min(right, delta));
+    const l = [...start];
+    l[i] += delta;
+    if (!last) l[i + 1] -= delta;
+    edit[k.core] = l;
+  }
+
+  let drag = $state<{ k: PoolCore; i: number; x: number; width: number; start: number[] } | null>(null);
+  function down(e: PointerEvent, k: PoolCore, i: number) {
+    if (busy) return;
+    const bar = (e.currentTarget as HTMLElement).closest(".bar") as HTMLElement;
+    drag = { k, i, x: e.clientX, width: bar.clientWidth, start: [...lens(k)] };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function move(e: PointerEvent) {
+    if (drag) shift(drag.k, drag.start, drag.i, Math.round(((e.clientX - drag.x) / drag.width) * drag.k.size));
+  }
+  function key(e: KeyboardEvent, k: PoolCore, i: number) {
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === "ArrowLeft") shift(k, lens(k), i, -step);
+    else if (e.key === "ArrowRight") shift(k, lens(k), i, step);
+    else return;
+    e.preventDefault();
+  }
+
+  let error = $state("");
   async function apply(k: PoolCore) {
     const l = lens(k);
     const why = checkLengths(k, l);
@@ -47,12 +90,9 @@
   }
 </script>
 
-<section class="panel block">
-  <div class="blockhead">
-    <h3>Biquad-Verteilung</h3>
-    <span class="muted small">Jeder DSP-Kern hat einen gemeinsamen Vorrat. Die Zahl der Filterplätze je Kanal lässt sich verschieben;
-      gespeicherte Bänder wandern mit.</span>
-  </div>
+<svelte:window onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)} />
+
+<section class="panel block" class:dragging={!!drag}>
   {#each cores as k (k.core)}
     {@const l = lens(k)}
     {@const free = freeOf(k, l)}
@@ -62,24 +102,32 @@
         <span class="cname">{coreName(k)}</span>
         <span class="muted small num">{k.size - free} von {k.size} verteilt{free > 0 ? `, ${free} frei` : ""}</span>
       </div>
-      <div class="bar" role="img" aria-label="Aufteilung {coreName(k)}">
+      <div class="bar" role="group" aria-label="Aufteilung {coreName(k)}, Grenzen mit der Maus oder den Pfeiltasten verschieben">
         {#each k.channels as c, i (c.ch)}
-          {@const used = Math.min(lastUsed(d, c.ch), l[i])}
-          <div class="seg" class:cur={c.ch === current} style="flex: {Math.max(l[i], 0)} 1 0; --c: {colorOf(c.ch)}" title="{name(c.ch)}: {l[i]} Biquads, bis Band {lastUsed(d, c.ch)} belegt">
-            <div class="usedpart" style="width: {l[i] ? (100 * used) / l[i] : 0}%"></div>
+          {@const used = lastUsed(d, c.ch)}
+          <div class="seg" class:cur={c.ch === current} class:short={used > l[i]} style="flex: {Math.max(l[i], 0)} 1 0; --c: {colorOf(c.ch)}"
+            title="{name(c.ch)}: {l[i]} Biquads, belegt bis Band {used}">
+            <div class="usedpart" style="width: {l[i] ? Math.min(100, (100 * used) / l[i]) : 0}%"></div>
+            <span class="lbl num">{name(c.ch)} · {l[i]}</span>
           </div>
+          <!-- a focusable separator is a splitter (ARIA window splitter pattern) -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+          <div class="handle" class:active={drag?.k.core === k.core && drag.i === i} role="separator" aria-orientation="vertical" tabindex="0"
+            aria-valuenow={l[i]} aria-label="Grenze nach {name(c.ch)}" title="Ziehen verschiebt die Grenze (Pfeiltasten: 1, mit Umschalt: 10)"
+            onpointerdown={(e) => down(e, k, i)} onpointermove={move} onkeydown={(e) => key(e, k, i)}><i></i></div>
         {/each}
-        {#if free > 0}<div class="seg free" style="flex: {free} 1 0"></div>{/if}
+        {#if free > 0}<div class="seg free" style="flex: {free} 1 0" title="{free} frei"></div>{/if}
       </div>
       <div class="fields">
         {#each k.channels as c, i (c.ch)}
-          {@const lost = lastUsed(d, c.ch) > l[i]}
-          <label class="f" class:cur={c.ch === current}>
-            <span><i style="background: {colorOf(c.ch)}"></i>{name(c.ch)}</span>
-            <input class="num" class:bad={l[i] < c.min || lost} type="number" min={c.min} max={255} value={l[i]} disabled={!!busy}
-              onchange={(e) => set(k, i, Number((e.target as HTMLInputElement).value))} />
-            <small class="muted">{lost ? `Band ${lastUsed(d, c.ch)} fiele weg` : `min. ${Math.max(c.min, 1)}, belegt bis ${lastUsed(d, c.ch)}`}</small>
-          </label>
+          {@const used = lastUsed(d, c.ch)}
+          <div class="field" class:cur={c.ch === current} class:short={used > l[i]}>
+            <span class="who"><i style="background: {colorOf(c.ch)}"></i>{name(c.ch)}</span>
+            <label class="val num"><input value={l[i]} inputmode="numeric" disabled={!!busy} aria-label="Biquads {name(c.ch)}"
+              onchange={(e) => typed(e, k, i)}
+              onkeydown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); set(k, i, l[i] + (e.key === "ArrowUp" ? 1 : -1)); } }} /><span>Biquads</span></label>
+            <small>{used > l[i] ? `Band ${used} fiele weg` : `min. ${Math.max(c.min, 1)} · belegt bis ${used}`}</small>
+          </div>
         {/each}
         <div class="actions">
           {#if changed(k)}
@@ -96,25 +144,36 @@
 </section>
 
 <style>
-  .block { padding: .8rem 1rem; display: grid; gap: .7rem; }
-  .blockhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1rem; }
-  .blockhead h3 { margin: 0; }
-  .core { display: grid; gap: .4rem; }
+  .block { padding: .9rem 1rem; display: grid; gap: 1.3rem; margin-top: .9rem; }
+  .dragging { cursor: col-resize; }
+  .core { display: grid; gap: .55rem; }
   .corehead { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   .cname { font-weight: 600; font-size: .88rem; }
-  .bar { display: flex; height: .9rem; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: var(--raised); }
-  .seg { position: relative; min-width: 2px; background: color-mix(in srgb, var(--c) 30%, transparent); border-right: 1px solid var(--panel); }
-  .seg.cur { background: color-mix(in srgb, var(--c) 45%, transparent); }
-  .seg .usedpart { position: absolute; inset: 0 auto 0 0; background: var(--c); opacity: .85; }
-  .seg.free { background: repeating-linear-gradient(45deg, transparent 0 4px, var(--line) 4px 6px); }
-  .fields { display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: end; }
-  .f { display: grid; gap: .15rem; font-size: .78rem; min-width: 7.5rem; }
-  .f span { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); }
-  .f.cur span { color: var(--text, inherit); font-weight: 600; }
-  .f i { width: .6rem; height: .6rem; border-radius: 3px; display: inline-block; }
-  .f input { width: 5.5rem; }
-  .f input.bad { border-color: var(--warn); }
-  .actions { display: flex; gap: .5rem; margin-left: auto; }
+  .bar { display: flex; height: 2.1rem; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); user-select: none; touch-action: none; }
+  .seg { position: relative; min-width: 0; overflow: hidden; background: color-mix(in srgb, var(--c) 20%, transparent); }
+  .seg:first-child { border-radius: 7px 0 0 7px; }
+  .seg:last-child, .seg.free { border-radius: 0 7px 7px 0; }
+  .seg.cur { background: color-mix(in srgb, var(--c) 34%, transparent); }
+  .seg .usedpart { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--c) 68%, transparent); }
+  .seg.short { box-shadow: inset 0 0 0 2px var(--warn); }
+  .seg .lbl { position: relative; display: block; padding: 0 .55rem; line-height: 2.1rem; font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+  .seg.free { background: repeating-linear-gradient(45deg, transparent 0 5px, var(--line) 5px 7px); }
+  .handle { flex: none; position: relative; width: 12px; margin: 0 -6px; z-index: 1; cursor: col-resize; display: grid; place-items: center; touch-action: none; }
+  .handle i { width: 3px; height: 1.3rem; border-radius: 2px; background: var(--panel); box-shadow: 0 0 0 1px var(--line-strong); transition: background .12s, width .12s; }
+  .handle:hover i, .handle:focus-visible i, .handle.active i { background: var(--accent); box-shadow: none; width: 4px; }
+  .handle:focus-visible { outline: none; }
+  .fields { display: flex; flex-wrap: wrap; gap: .45rem; align-items: stretch; }
+  .field { display: grid; gap: .05rem; padding: .4rem .65rem .45rem; min-width: 8.5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+  .field.cur { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+  .who { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; color: var(--muted); }
+  .who i { width: .6rem; height: .6rem; border-radius: 3px; display: inline-block; }
+  .val { display: inline-flex; align-items: baseline; gap: .3rem; font-size: .76rem; color: var(--muted); }
+  .val input { width: 3.1rem; text-align: right; border: 1px solid transparent; background: none; padding: .05rem .25rem; border-radius: 6px; font: inherit; font-size: 1.05rem; color: var(--fg); }
+  .val input:hover { border-color: var(--line-strong); }
+  .val input:focus { border-color: var(--accent); outline: none; background: var(--panel); }
+  .field small { font-size: .7rem; color: var(--muted); }
+  .field.short small, .field.short input { color: var(--warn); }
+  .actions { display: flex; gap: .5rem; margin-left: auto; align-self: center; }
   .err { color: var(--err); margin: 0; }
   .busy { color: var(--accent); margin: 0; }
   .small { font-size: .78rem; }
