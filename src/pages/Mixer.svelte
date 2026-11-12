@@ -3,6 +3,7 @@
   import { inputSide, inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames,
     sumsActive, sumsMapping } from "../lib/device";
   import Knob from "../components/Knob.svelte";
+  import InputLevels from "../components/InputLevels.svelte";
 
   const d = $derived(app.device);
   const lim = $derived(limitsOf(d));
@@ -62,8 +63,8 @@
 <header class="head">
   <div>
     <h2>Mixer</h2>
-    <p class="muted">Welcher Eingang mit welchem Anteil auf welchen Ausgang geht. Vier Profile lassen sich vorbereiten
-      und umschalten, z. B. je Quelle eines.</p>
+    <p class="muted">Welcher Eingang mit welchem Anteil auf welchen Ausgang geht, darunter die Eingangspegel. Vier Profile lassen sich
+      vorbereiten und umschalten, z. B. je Quelle eines.</p>
   </div>
 </header>
 
@@ -144,8 +145,11 @@
   </section>
 </div>
 
+<div class="levels"><InputLevels /></div>
+
 <style>
   .head { margin-bottom: 1rem; }
+  .levels { margin-top: .75rem; }
   .bar { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; margin-bottom: .75rem; }
   .tabs { display: flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
   .tabs button { border: 0; border-radius: 0; background: none; padding: .4rem .85rem; color: var(--muted); display: inline-flex; align-items: center; gap: .45rem; }

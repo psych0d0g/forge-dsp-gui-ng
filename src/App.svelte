@@ -6,7 +6,6 @@
   import Icon from "./components/Icon.svelte";
   import VuMeter from "./components/VuMeter.svelte";
   import Overview from "./pages/Overview.svelte";
-  import Inputs from "./pages/Inputs.svelte";
   import Outputs from "./pages/Outputs.svelte";
   import Console from "./pages/Console.svelte";
   import Delay from "./pages/Delay.svelte";
@@ -27,7 +26,7 @@
   const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
     { group: "Gerät", items: [{ id: "overview", label: "Übersicht" }] },
     { group: "Signalweg", items: [
-      { id: "inputs", label: "Eingänge" }, { id: "mixer", label: "Mixer" },
+      { id: "mixer", label: "Eingänge & Mixer" },
       { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" },
       { id: "outputs", label: "Ausgänge" }] },
     { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
@@ -43,7 +42,7 @@
     if (q.get("theme") === "dark" || q.get("theme") === "light") theme = q.get("theme") as "dark" | "light";
     if (q.has("demo")) {
       await connect("demo");
-      if (q.get("page")) app.page = q.get("page") as PageId;
+      if (q.get("page")) app.page = (q.get("page") === "inputs" ? "mixer" : q.get("page")) as PageId;
       return;
     }
     onBridge = await servedByBridge();
@@ -140,7 +139,6 @@
         </section>
       </div>
     {:else if app.page === "overview"}<Overview />
-    {:else if app.page === "inputs"}<Inputs />
     {:else if app.page === "outputs"}<Outputs />
     {:else if app.page === "delay"}<Delay />
     {:else if app.page === "mixer"}<Mixer />

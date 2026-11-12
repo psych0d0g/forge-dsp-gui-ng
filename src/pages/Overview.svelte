@@ -18,7 +18,7 @@
     return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1);
   };
   const stages = $derived([
-    { page: "inputs" as PageId, icon: "inputs", title: "Eingänge",
+    { page: "mixer" as PageId, icon: "inputs", title: "Eingänge",
       lines: [`${id.analogInPairs} analoge Paare`, `${id.spdifPairs} digital`] },
     { page: "mixer" as PageId, icon: "mixer", title: "Mixer",
       lines: [`Profil ${d.mixer.position || "–"}`, d.mixer.input !== null ? `Quelle ${d.mixer.input}` : ""] },
