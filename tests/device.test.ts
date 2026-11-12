@@ -225,7 +225,7 @@ describe("MODC blocks", () => {
   });
 });
 
-import { sumsActive, sumsActiveAnywhere, sumsMapping } from "../src/lib/device";
+import { sumsActive, sumsActiveAnywhere, sumsMapping, sumsShares } from "../src/lib/device";
 
 describe("signal sums (All Over)", () => {
   it("on maps A to the left and B to the right outputs, off clears them", async () => {
@@ -239,6 +239,19 @@ describe("signal sums (All Over)", () => {
     expect(sumsActive(s, 1)).toBe(true);
     expect(sumsActiveAnywhere(s)).toBe(true);
     expect(sumsMapping(s, 1, true)).toEqual([]);                      // already as wanted
+    // shares set by the user are remembered at switch-off and come back at switch-on
+    s.mixer.values[1][3][9] = 40; s.mixer.values[1][4][10] = 0; s.mixer.values[1][4][9] = 25;
+    const kept = sumsShares(s, 1);
+    expect(kept["3.9"]).toBe(40);
+    for (const [c, g, v] of sumsMapping(s, 1, false)) s.mixer.values[1][c][g] = v;
+    expect(sumsActive(s, 1)).toBe(false);
+    const back = sumsMapping(s, 1, true, kept);
+    for (const [c, g, v] of back) s.mixer.values[1][c][g] = v;
+    expect(sumsShares(s, 1)).toEqual(kept);
+    expect(back).toContainEqual([3, 9, 40]);
+    expect(back).toContainEqual([4, 9, 25]);
+    // nothing remembered above 0: the default mapping, here three shares differ from it
+    expect(sumsMapping(s, 1, true, { "3.9": 0 })).toEqual([[3, 9, 100], [4, 9, 0], [4, 10, 100]]);
     const off = sumsMapping(s, 1, false);
     expect(off).toHaveLength(8);
     expect(off.every(([, , v]) => v === 0)).toBe(true);

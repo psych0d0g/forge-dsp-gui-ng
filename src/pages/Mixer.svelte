@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app, inDefault, inNameRaw, outName, outNameRaw, setInName, setOutName, write } from "../lib/app.svelte";
   import { inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames, sumsActive,
-    sumsMapping } from "../lib/device";
+    sumsMapping, sumsShares } from "../lib/device";
   import Knob from "../components/Knob.svelte";
   import DbFader from "../components/DbFader.svelte";
   import NameField from "../components/NameField.svelte";
@@ -42,15 +42,24 @@
   }
 
   // "All Over": the two signal sums as a common path in front of all outputs. Off: its controls
-  // stay in place but are locked. Switching glides the shares to 0 or back to full level.
+  // stay in place but are locked. Switching glides the shares to 0, or back to what they were.
   let gliding = $state(false);
+  const remembered: Record<number, Record<string, number> | undefined> = {};
   let wantOn = $state<boolean | null>(null);
   const allOver = $derived(wantOn ?? sumsActive(d, profile));
   $effect(() => { profile; wantOn = null; });
   function toggleAllOver() {
     if (gliding) return;
     const on = !allOver, p = profile;
-    const moves = sumsMapping(d, p, on).map(([c, g, to]) => ({ c, g, from: d.mixer.values[p][c][g], to }));
+    // off: remember the shares set on the device; on: bring exactly those back
+    const key = `forge-allover:${d.identity.keyInfo.split("-")[3] || "unknown"}:${p}`;
+    if (!on) {
+      remembered[p] = sumsShares(d, p);
+      try { localStorage.setItem(key, JSON.stringify(remembered[p])); } catch { /* kept for this session */ }
+    } else if (!remembered[p]) {
+      try { remembered[p] = JSON.parse(localStorage.getItem(key) ?? "null") ?? undefined; } catch { /* none */ }
+    }
+    const moves = sumsMapping(d, p, on, remembered[p]).map(([c, g, to]) => ({ c, g, from: d.mixer.values[p][c][g], to }));
     wantOn = on;
     if (!moves.length) return;
     gliding = true;
@@ -206,7 +215,7 @@
 
 <p class="muted small foot">Regler ziehen (hoch/runter) oder Wert eintippen, 100 % = voller Pegel. Doppelklick auf einen Drehregler schaltet
   zwischen 0 und 100, auf einen Fader setzt 0 dB. {#if !allOver}„All Over“ ist aus: Die Summen sind gesperrt.{:else}„All Over“ ist an:
-  Summe A liegt auf den linken, Summe B auf den rechten Ausgängen; ihre Filter stehen unter „Filter & EQ“.{/if}</p>
+  Die Summen liegen mit den Anteilen der Spalten A und B auf den Ausgängen; ihre Filter stehen unter „Filter & EQ“.{/if}</p>
 
 <style>
   .head { margin-bottom: 1rem; }

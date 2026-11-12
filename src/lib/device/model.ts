@@ -365,15 +365,30 @@ export function sumsActive(s: DeviceState, profile: number): boolean {
 }
 export const sumsActiveAnywhere = (s: DeviceState) => Object.keys(s.mixer.values).some((p) => sumsActive(s, Number(p)));
 
-/** mixer writes [channel row, column, value] that switch the sums on (A to the left = odd
- * outputs, B to the right = even outputs, full level) or off (no output takes a sum) */
-export function sumsMapping(s: DeviceState, profile: number, on: boolean): [number, number, number][] {
+/** shares of the sums on the outputs in a profile, as "row.column" -> value (what "All Over"
+ * remembers when it is switched off) */
+export function sumsShares(s: DeviceState, profile: number): Record<string, number> {
+  const g = s.mixer.values[profile] ?? {}, out: Record<string, number> = {};
+  s.gain.out.forEach((_, i) => {
+    const row = mixerRowOfOutput(i + 1);
+    for (const col of MIXER_BUS_COLUMNS) if (g[row]?.[col] !== undefined) out[`${row}.${col}`] = g[row][col];
+  });
+  return out;
+}
+
+/**
+ * Mixer writes [channel row, column, value] that switch the sums on or off. On: back to the
+ * remembered shares; without any (never used before) sum A goes to the left (odd) and sum B to
+ * the right (even) outputs at full level. Off: no output takes a sum.
+ */
+export function sumsMapping(s: DeviceState, profile: number, on: boolean, remembered?: Record<string, number>): [number, number, number][] {
   const g = s.mixer.values[profile] ?? {};
+  const useRemembered = !!remembered && Object.values(remembered).some((v) => v > 0);
   const out: [number, number, number][] = [];
   s.gain.out.forEach((_, i) => {
     const row = mixerRowOfOutput(i + 1);
     MIXER_BUS_COLUMNS.forEach((col, k) => {
-      const want = on && k === i % 2 ? 100 : 0;
+      const want = !on ? 0 : useRemembered ? remembered![`${row}.${col}`] ?? 0 : k === i % 2 ? 100 : 0;
       if (g[row]?.[col] !== undefined && g[row][col] !== want) out.push([row, col, want]);
     });
   });
