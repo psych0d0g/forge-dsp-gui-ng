@@ -9,6 +9,7 @@
   import Inputs from "./pages/Inputs.svelte";
   import Outputs from "./pages/Outputs.svelte";
   import Console from "./pages/Console.svelte";
+  import Delay from "./pages/Delay.svelte";
   import Planned from "./pages/Planned.svelte";
 
   const version = __APP_VERSION__;
@@ -22,7 +23,7 @@
     { group: "Gerät", items: [{ id: "overview", label: "Übersicht", ready: true }] },
     { group: "Signalweg", items: [
       { id: "inputs", label: "Eingänge", ready: true }, { id: "mixer", label: "Mixer" },
-      { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" },
+      { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit", ready: true },
       { id: "outputs", label: "Ausgänge", ready: true }] },
     { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
     { group: "Werkzeuge", items: [
@@ -32,7 +33,6 @@
   const PLANNED: Partial<Record<PageId, { title: string; text: string; issue: number }>> = {
     mixer: { title: "Mixer", issue: 4, text: "Matrix aus Ausgängen und Eingängen je Mixer-Position: welche Quelle mit welchem Anteil auf welchen Kanal geht." },
     filters: { title: "Filter & EQ", issue: 5, text: "Weichen, parametrischer EQ und Allpässe je Kanal, mit Frequenz- und Phasengang." },
-    delay: { title: "Laufzeit", issue: 6, text: "Laufzeitkorrektur je Ausgang in Millisekunden oder Zentimetern." },
     modc: { title: "Steuerblöcke", issue: 7, text: "Lautstärke, Loudness, Eingangsumschaltung, Mono und weitere Blöcke mit ihren Ereignissen." },
     presets: { title: "Presets", issue: 8, text: "Abstimmungen laden, speichern, kopieren und als Datei sichern." },
     diagnose: { title: "Diagnose", issue: 9, text: "Bausteine auf den I2C-Bussen, Empfänger- und DAC-Status, Versorgung, Diagnosebericht." },
@@ -145,6 +145,7 @@
     {:else if app.page === "overview"}<Overview />
     {:else if app.page === "inputs"}<Inputs />
     {:else if app.page === "outputs"}<Outputs />
+    {:else if app.page === "delay"}<Delay />
     {:else if app.page === "console"}<Console />
     {:else if PLANNED[app.page]}<Planned {...PLANNED[app.page]!} />
     {/if}

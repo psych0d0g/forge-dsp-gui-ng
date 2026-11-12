@@ -56,6 +56,7 @@ export interface DeviceState {
   gain: { out: number[]; in: number[]; spdif: number[] };
   mute: number[];
   phase: number[];
+  /** samples */
   delay: { out: number[]; in: number[] };
   mixer: {
     position: number;
@@ -284,3 +285,47 @@ export const INPUT_PAIRS: { label: string; in: [number, number] }[] = [
 
 /** level in dBFS from the gain-scale value of system.vu; 0 = no signal */
 export const vuToDb = (v: number) => (v > 0 ? (v - 255) / 2 : -Infinity);
+
+/** Output delays: the channels of one DSP share a pool of samples. */
+export interface DelayGroup {
+  /** 1-based output channels */
+  channels: number[];
+  /** samples of the pool (used + free) */
+  budget: number;
+}
+
+/** Not readable from the device yet (forge-dsp-firmware#54; its delay.left is wrong on devices with
+ * three DSPs, #53): on all models the outputs sit in blocks of four on one DSP each, and the delay
+ * lines of a DSP share 5840 samples (flow_max_samples). */
+export const DELAY_POOL_SAMPLES = 5840;
+export const DELAY_POOL_CHANNELS = 4;
+
+export function delayGroups(s: DeviceState): DelayGroup[] {
+  const groups: DelayGroup[] = [];
+  for (let c = 1; c <= s.delay.out.length; c += DELAY_POOL_CHANNELS)
+    groups.push({ channels: Array.from({ length: Math.min(DELAY_POOL_CHANNELS, s.delay.out.length - c + 1) }, (_, i) => c + i),
+      budget: DELAY_POOL_SAMPLES });
+  return groups;
+}
+
+/** largest value channel `ch` may take without exceeding the pool of its group */
+export function delayMax(s: DeviceState, group: DelayGroup, ch: number): number {
+  const others = group.channels.reduce((a, c) => a + (c === ch ? 0 : s.delay.out[c - 1] ?? 0), 0);
+  return Math.max(0, group.budget - others);
+}
+
+export const SPEED_OF_SOUND = 343;  // m/s, as the firmware's cm factor (0.357 cm per sample at 96 kHz)
+export const samplesToMs = (n: number, rate: number) => (n / rate) * 1000;
+export const samplesToCm = (n: number, rate: number) => (n / rate) * SPEED_OF_SOUND * 100;
+export const msToSamples = (ms: number, rate: number) => Math.round((ms / 1000) * rate);
+export const cmToSamples = (cm: number, rate: number) => Math.round((cm / 100 / SPEED_OF_SOUND) * rate);
+
+/**
+ * Time alignment from the distances listener - speaker (cm): the farthest speaker gets no
+ * delay, every other one the time its sound arrives early. Channels without a distance keep 0.
+ */
+export function alignFromDistances(distCm: (number | null)[], rate: number): number[] {
+  const known = distCm.filter((d): d is number => d !== null && d > 0);
+  const far = known.length ? Math.max(...known) : 0;
+  return distCm.map((d) => (d !== null && d > 0 ? cmToSamples(far - d, rate) : 0));
+}

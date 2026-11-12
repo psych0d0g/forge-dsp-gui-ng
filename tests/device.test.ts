@@ -3,8 +3,8 @@ import v30 from "./fixtures/V30-96LN.json";
 import { describe, expect, it } from "vitest";
 import { ForgeClient, parseAnswer, parseValue } from "../src/lib/protocol";
 import type { Transport } from "../src/lib/transport/types";
-import { applyAnswer, bytesHex, dbToRaw, emptyState, exportState, hexBytes, isPort, modcTypeVersion, parseKeyInfo,
-  rawToDb, readDevice } from "../src/lib/device";
+import { alignFromDistances, applyAnswer, bytesHex, cmToSamples, dbToRaw, delayGroups, delayMax, emptyState, exportState,
+  hexBytes, isPort, modcTypeVersion, parseKeyInfo, rawToDb, readDevice, samplesToCm, samplesToMs } from "../src/lib/device";
 
 /** answers recorded from the firmware's own command interpreter (tests/fixtures/make_fixture.py) */
 const FIXTURES: Record<string, { answers: Record<string, string[]> }> = { "V40-96ELN": v40, "V30-96LN": v30 };
@@ -62,6 +62,11 @@ describe("readDevice", () => {
     expect(s.mute[2]).toBe(1);
     expect(s.phase[3]).toBe(1);
     expect(s.delay.out[1]).toBe(48);
+    const groups = delayGroups(s);                           // 8 outputs on 2 DSPs, 5840 samples each
+    expect(groups.map((g) => g.channels)).toEqual([[1, 2, 3, 4], [5, 6, 7, 8]]);
+    expect(groups.map((g) => g.budget)).toEqual([5840, 5840]);
+    expect(delayMax(s, groups[0], 1)).toBe(5840 - 48);       // what channel 2 uses is gone for channel 1
+    expect(delayMax(s, groups[0], 2)).toBe(5840);
     expect(s.mixer.position).toBe(1);
     expect(s.mixer.values[1][3][2]).toBe(100);
     expect(s.mixer.values[1][4][1]).toBe(80);
@@ -119,5 +124,16 @@ describe("applyAnswer", () => {
     expect(ap(" *.1 gain.out.1 ok")).toBe(false);
     expect(ap(" !.1 foo unknown command")).toBe(false);
     expect(ap(" <.1 something.else=1")).toBe(false);
+  });
+});
+
+describe("delay units and alignment", () => {
+  it("converts as the firmware does", () => {
+    expect(samplesToMs(48, 96000)).toBeCloseTo(0.5, 9);
+    expect(samplesToCm(48, 96000)).toBeCloseTo(17.15, 2);     // firmware: delay.2.cm=17.15
+    expect(cmToSamples(17.15, 96000)).toBe(48);
+  });
+  it("aligns to the farthest speaker", () => {
+    expect(alignFromDistances([100, 134.3, null, 0], 96000)).toEqual([96, 0, 0, 0]);
   });
 });

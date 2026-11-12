@@ -75,7 +75,7 @@
 "<.1 phase.out=[1,1,1,1,1,1,1,1]"
 ],
 "get.1 delay": [
-"<.1 delay=[32767,48,32767,32767,32767,32767,32767,32767]"
+"<.1 delay=[0,48,0,0,0,0,0,0]"
 ],
 "get.1 delay.in": [
 "!.1 delay.in unknown command"
@@ -108,8 +108,8 @@
 "get.1 system.errors": [
 "<.1 system.errors=[[128,1364],[65,340],[66,1]]"
 ],
-"get.1 system.temperature": [
-"<.1 system.temperature=0.00"
+"get.1 system.temperature.celsius": [
+"<.1 system.temperature.celsius=-273.15"
 ],
 "get.1 biquad.clickless": [
 "<.1 biquad.clickless=1"

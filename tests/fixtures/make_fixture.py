@@ -12,7 +12,8 @@ import sys
 
 PRE = ["#pin=PIN_CPU_POWER_CTRL_IN,1", "#store_init", "#i2cdsp=1,68", "#i2cdsp=2,68", "#i2cdsp=2,6A", "#dsp_detect",
        "#events_init", "#dtr=1", "#modc_init", "1|set.1 preset.loaded=0", "#mainloop"]
-SETS = ["set.1 mixer.position=1", "set.1 gain.out.1=223", "set.1 gain.out.2=199", "set.1 gain.in.1=200",
+# the blank preset storage of the harness reads as 32767 samples: start from 0 as a device does
+SETS = [f"set.1 delay.{n}=0" for n in range(1, 9)] + ["set.1 mixer.position=1", "set.1 gain.out.1=223", "set.1 gain.out.2=199", "set.1 gain.in.1=200",
         "set.1 mute.out.3=1", "set.1 phase.out.4=1", "set.1 delay.2=48", "set.1 mixer.1.3.2=100",
         "set.1 mixer.1.4.1=80", "set.1 biquad.1.1.calc=[1,1000,35,1414,0,128]",
         "set.1 biquad.2.3.calc=[22,80,0,707,45,128]", "set.1 modc.9=[1,108,02D7280F,0,0,0,0,1E100000]",
