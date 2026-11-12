@@ -14,6 +14,14 @@
   const sources = $derived(sourceNames(d));
   const BUS = ["Bus A", "Bus B"];
   const inputs = Array.from({ length: MIXER_INPUTS }, (_, i) => i + 1);
+  // sources in groups: analog inputs (as many as gain.in has, 6), digital (the rest), the buses
+  const analog = $derived(Math.min(MIXER_INPUTS, d.gain.in.length || 6));
+  const srcGroups = $derived([
+    { label: "Analog", cols: inputs.filter((g) => g <= analog) },
+    { label: "Digital", cols: inputs.filter((g) => g > analog) },
+    { label: "Bus", cols: MIXER_BUS_COLUMNS },
+  ]);
+  const groupStart = (g: number) => g === analog + 1 || g === MIXER_INPUTS + 1;
 
   // Destinations: the two buses, then the outputs; shown two at a time (a stereo pair).
   interface Dest { row: number; label: string; nr: string }
@@ -77,14 +85,14 @@
   <!-- routing at a glance; a click selects the destination -->
   <section class="panel map" aria-label="Routing-Übersicht">
     <h3>Routing</h3>
-    <div class="maphead"><span></span>{#each [...inputs, ...MIXER_BUS_COLUMNS] as g}<span class="num" title={colName(g)}>{g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : g}</span>{/each}</div>
+    <div class="maphead"><span></span>{#each [...inputs, ...MIXER_BUS_COLUMNS] as g}<span class="num" class:gs={groupStart(g)} title={colName(g)}>{g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : g}</span>{/each}</div>
     {#each groups as grp, gi}
       <button class="maprow" class:on={group === gi} aria-pressed={group === gi} onclick={() => (group = gi)}>
         {#each grp as dst}
           <span class="mapline">
             <span class="mapname">{#if dst.nr}<span class="num n">{dst.nr}</span>{/if}{dst.label}</span>
             {#each [...inputs, ...MIXER_BUS_COLUMNS] as g}
-              <span class="cell" class:none={!has(dst.row, g)} style="--v:{Math.min(100, grid[dst.row]?.[g] ?? 0)}"
+              <span class="cell" class:gs={groupStart(g)} class:none={!has(dst.row, g)} style="--v:{Math.min(100, grid[dst.row]?.[g] ?? 0)}"
                 title="{colName(g)} → {dst.label}: {grid[dst.row]?.[g] ?? '–'}"></span>
             {/each}
           </span>
@@ -99,21 +107,21 @@
       <div class="strip">
         <div class="dst">{#if dst.nr}<span class="chn num">{dst.nr}</span>{/if}<strong>{dst.label}</strong></div>
         <div class="knobs">
-          {#each inputs as g}
-            {#if has(dst.row, g)}
-              <Knob value={grid[dst.row][g]} min={lim.mixer[0]} max={lim.mixer[1]} caption={inName(g)} unit="%"
-                label="{inName(g)} auf {dst.label}" onchange={(v) => set(dst.row, g, v)} />
+          {#each srcGroups as sg}
+            {#if sg.cols.some((g) => has(dst.row, g))}
+              <div class="sgroup">
+                <span class="sglabel">{sg.label}</span>
+                <div class="sgknobs">
+                  {#each sg.cols as g}
+                    {#if has(dst.row, g)}
+                      <Knob value={grid[dst.row][g]} min={lim.mixer[0]} max={lim.mixer[1]} caption={colName(g)} unit="%"
+                        label="{colName(g)} auf {dst.label}" onchange={(v) => set(dst.row, g, v)} />
+                    {/if}
+                  {/each}
+                </div>
+              </div>
             {/if}
           {/each}
-          {#if MIXER_BUS_COLUMNS.some((g) => has(dst.row, g))}
-            <span class="sep" aria-hidden="true"></span>
-            {#each MIXER_BUS_COLUMNS as g}
-              {#if has(dst.row, g)}
-                <Knob value={grid[dst.row][g]} min={lim.mixer[0]} max={lim.mixer[1]} caption={colName(g)} unit="%"
-                  label="{colName(g)} auf {dst.label}" onchange={(v) => set(dst.row, g, v)} />
-              {/if}
-            {/each}
-          {/if}
         </div>
       </div>
     {/each}
@@ -135,7 +143,7 @@
   .layout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .75rem; align-items: start; }
   .map { padding: .85rem .6rem .6rem; display: grid; gap: 2px; }
   .map h3 { padding: 0 .4rem .4rem; }
-  .maphead, .mapline { display: grid; grid-template-columns: 7.5rem repeat(10, .8rem); gap: 3px; align-items: center; }
+  .maphead, .mapline { display: grid; grid-template-columns: 7.5rem repeat(6, .8rem) 1.15rem .8rem 1.15rem .8rem; gap: 3px; align-items: center; }
   .maphead { padding: 0 .4rem; font-size: .62rem; color: var(--faint); text-align: center; }
   .maprow { display: grid; gap: 3px; padding: .3rem .4rem; border: 1px solid transparent; background: none; border-radius: 8px; text-align: left; font: inherit; }
   .maprow.on { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -148,8 +156,12 @@
   .strip { display: grid; gap: .5rem; padding-bottom: .9rem; border-bottom: 1px solid var(--line); }
   .dst { display: flex; align-items: center; gap: .55rem; }
   .chn { width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 6px; background: var(--raised); color: var(--muted); font-size: .8rem; }
-  .knobs { display: flex; flex-wrap: wrap; gap: .5rem .15rem; align-items: flex-start; }
-  .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .2rem; }
+  .knobs { display: flex; flex-wrap: wrap; gap: .6rem .5rem; align-items: flex-start; }
+  /* analog, digital and bus sources as separate blocks */
+  .sgroup { display: grid; gap: .3rem; padding: .45rem .35rem .3rem; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+  .sglabel { font-size: .66rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-left: .35rem; }
+  .sgknobs { display: flex; flex-wrap: wrap; gap: .4rem .1rem; }
+  .gs { margin-left: .35rem; }
   .small { font-size: .8rem; }
   @media (max-width: 68rem) { .layout { grid-template-columns: minmax(0, 1fr); } .src { margin-left: 0; } }
 </style>
