@@ -2,7 +2,7 @@
   import { tick, untrack } from "svelte";
   import { app, outName, write } from "../lib/app.svelte";
   import { isPort, limitsOf, sumsActiveAnywhere, type Biquad } from "../lib/device";
-  import { isActive, typeInfo, TYPES } from "../lib/dsp/biquad";
+  import { isActive, typeInfo, TYPES, viewRange } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
@@ -39,7 +39,13 @@
   // (pointer released, field left, added, removed), so nothing moves away under the hand.
   let order = $state<number[]>([]);
   const byFreq = () => slots.filter((s) => s.bq.type !== 0).sort((a, b) => a.bq.f - b.bq.f || a.n - b.n).map((s) => s.n);
+  // The curve shows the section where this channel's filters are. Like the order it follows only
+  // when an interaction ends, so the axis does not move while a point is dragged.
+  let zoom = $state(true);
+  let view = $state<[number, number] | undefined>(undefined);
+  const section = () => viewRange(slots.filter((s) => isActive(s.bq) && s.bq.type !== 19).map((s) => s.bq.f), lim.freq);
   async function resort() {
+    view = section();
     const next = byFreq();
     if (next.length === order.length && next.every((n, i) => n === order[i])) return;
     const el = document.activeElement as HTMLElement | null;
@@ -50,6 +56,7 @@
   $effect(() => {
     ch;
     order = untrack(byFreq);  // only the channel is a dependency
+    view = untrack(section);
   });
   const used = $derived([
     ...order.map((n) => slots.find((s) => s.n === n)).filter((s): s is { n: number; bq: Biquad } => !!s && s.bq.type !== 0),
@@ -214,13 +221,14 @@
 <section class="panel plot">
   <div class="plothead">
     <h3>{chName(ch)}</h3>
+    <label class="check" title="Nur den Frequenzbereich zeigen, in dem die Filter dieses Kanals liegen"><input type="checkbox" bind:checked={zoom} /> Ausschnitt</label>
     <label class="check"><input type="checkbox" bind:checked={showPhase} /> Phase</label>
     {#if d.biquads[partner(ch)]}
       <label class="check" title="Jede Änderung auch auf {chName(partner(ch))} anwenden">
         <input type="checkbox" bind:checked={linked} /> mit {chName(partner(ch))} koppeln</label>
     {/if}
   </div>
-  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} gainRange={lim.bqGain} {selected} {showPhase}
+  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} view={zoom ? view : undefined} gainRange={lim.bqGain} {selected} {showPhase}
     onselect={(n) => (selected = n)}
     onmove={(n, f, g) => update(n, g === null ? { f } : { f, gain: g })}
     onq={(n, k) => update(n, { q: clamp(Math.round(d.biquads[ch][n].q * k), lim.bqQ) })} />
@@ -237,30 +245,30 @@
       <div class="strip" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
         <div class="striphead">
           <span class="nr">{tag(n)}</span>
-          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Band ein/aus"
-            onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
           <button class="ghost del" title="Band entfernen" aria-label="Band {tag(n)} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
         </div>
+        <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Band ein/aus"
+          onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
         <div class="fader">
           <VFader frac={gainFrac(bq.gain)} zero={gainFrac(0)} label="Pegel Band {tag(n)}" valuetext={fmtG(bq.gain)}
             onfrac={(f) => update(n, { gain: Math.round(lim.bqGain[0] + f * (lim.bqGain[1] - lim.bqGain[0])) })}
             onstep={(dir) => update(n, { gain: clamp(bq.gain + dir * 5, lim.bqGain) })} />
         </div>
-        <label class="f"><span>Pegel</span><span class="in"><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
-          onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /><i>dB</i></span></label>
-        <label class="f"><span>Frequenz</span><span class="in"><input class="num" data-k="f" onkeydown={tabAcross} value={bq.f} inputmode="numeric"
-          onchange={(e) => num(e, n, "f", 1, lim.freq)} /><i>Hz</i></span></label>
+        <label class="f"><span>Pegel dB</span><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
+          onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /></label>
+        <label class="f"><span>Frequenz Hz</span><input class="num" data-k="f" onkeydown={tabAcross} value={bq.f} inputmode="numeric"
+          onchange={(e) => num(e, n, "f", 1, lim.freq)} /></label>
         <div class="f">
           <span class="mode" role="group" aria-label="Breite des Bands angeben als">
-            <button class:on={!bw} aria-pressed={!bw} onclick={() => bandMode(n, bq, false)}>Güte</button>
-            <button class:on={bw} aria-pressed={bw} onclick={() => bandMode(n, bq, true)}>Bandbreite</button>
+            <button class:on={!bw} aria-pressed={!bw} title="Breite als Güte (Q)" onclick={() => bandMode(n, bq, false)}>Q</button>
+            <button class:on={bw} aria-pressed={bw} title="Breite als Bandbreite in Hz" onclick={() => bandMode(n, bq, true)}>Hz</button>
           </span>
           {#if bw}
-            <span class="in"><input class="num" data-k="w" onkeydown={tabAcross} value={bq.b} inputmode="numeric" aria-label="Bandbreite Band {tag(n)}"
-              onchange={(e) => num(e, n, "b", 1, [1, lim.bqB[1]])} /><i>Hz</i></span>
+            <input class="num" data-k="w" onkeydown={tabAcross} value={bq.b} inputmode="numeric" aria-label="Bandbreite Band {tag(n)} in Hz"
+              title="Bandbreite in Hz" onchange={(e) => num(e, n, "b", 1, [1, lim.bqB[1]])} />
           {:else}
-            <span class="in"><input class="num" data-k="w" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal" aria-label="Güte Band {tag(n)}"
-              onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} /><i>Q</i></span>
+            <input class="num" data-k="w" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal" aria-label="Güte Band {tag(n)}"
+              title="Güte (Q)" onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} />
           {/if}
         </div>
       </div>
@@ -285,7 +293,9 @@
   .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; }
   .check input { accent-color: var(--accent); }
 
-  .cards, .strips { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .4rem; align-items: stretch; }
+  /* filter cards wrap onto further rows; the band strips stay in one row and scroll sideways */
+  .cards { display: flex; flex-wrap: wrap; gap: .5rem; align-items: stretch; }
+  .strips { display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .4rem; align-items: stretch; }
   .card, .strip { flex: none; display: flex; flex-direction: column; gap: .45rem; padding: .5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
   .card.sel, .strip.sel { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--raised)); }
   .card.off .knobs, .strip.off > :not(.striphead) { opacity: .5; }
@@ -301,15 +311,15 @@
   .knobs :global(.knob .val input) { max-width: 3.6rem; }
   .card .del { margin-left: 0; }
 
-  .strip { width: 8.8rem; }
+  .strip { width: 4.5rem; padding: .4rem .3rem; gap: .35rem; }
+  .strip .sw { width: 100%; padding: .12rem 0; }
+  .strip .f input { width: 100%; min-width: 0; text-align: center; font-size: .85rem; padding: .22rem .15rem; }
+  .strip .f > span:first-child { text-align: center; }
   .fader { display: grid; justify-items: center; }
   .f { display: grid; gap: .1rem; font-size: .68rem; color: var(--muted); }
-  .in { display: flex; align-items: baseline; gap: .25rem; }
-  .in input { width: 100%; min-width: 0; text-align: right; font-size: .88rem; padding: .25rem .4rem; }
-  .in i { font-style: normal; font-size: .72rem; width: 1.1rem; flex: none; }
   .mode { display: flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; margin-bottom: .15rem; }
-  .mode button { flex: 1; border: 0; border-radius: 0; background: none; padding: .15rem .2rem; font-size: .7rem; color: var(--muted); }
+  .mode button { flex: 1; border: 0; border-radius: 0; background: none; padding: .12rem 0; font-size: .7rem; color: var(--muted); }
   .mode button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
-  .add { flex: none; width: 4.6rem; min-height: 5rem; display: grid; place-content: center; justify-items: center; gap: .2rem; border-style: dashed; color: var(--muted); }
+  .add { flex: none; width: 3.6rem; min-height: 5rem; display: grid; place-content: center; justify-items: center; gap: .2rem; border-style: dashed; color: var(--muted); }
   .plus { font-size: 1.4rem; line-height: 1; }
 </style>

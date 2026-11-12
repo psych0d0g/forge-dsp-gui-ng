@@ -4,15 +4,17 @@
   import type { Biquad } from "../lib/device";
   import { chainResponse, coeffs, isActive, logFreqs, typeInfo } from "../lib/dsp/biquad";
 
-  let { filters, rate, freq, gainRange, selected, showPhase, onselect, onmove, onq }: {
-    filters: { n: number; bq: Biquad; label?: string | number }[]; rate: number; freq: [number, number]; gainRange: [number, number];
+  let { filters, rate, freq, view, gainRange, selected, showPhase, onselect, onmove, onq }: {
+    filters: { n: number; bq: Biquad; label?: string | number }[]; rate: number; freq: [number, number];
+    /** range of the frequency axis (a section of `freq`); the handles still move within `freq` */
+    view?: [number, number]; gainRange: [number, number];
     selected: number | null; showPhase: boolean; onselect: (n: number) => void;
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
   } = $props();
 
   const W = 1000, H = 270, L = 44, R = 44, T = 12, B = 26;
   const DB_MIN = -30, DB_MAX = 18;
-  const lo = $derived(Math.max(10, freq[0])), hi = $derived(Math.min(rate / 2 - 1, freq[1]));
+  const lo = $derived(Math.max(10, (view ?? freq)[0])), hi = $derived(Math.min(rate / 2 - 1, (view ?? freq)[1]));
   const x = (f: number) => L + ((Math.log10(f) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (W - L - R);
   const y = (db: number) => T + ((DB_MAX - Math.max(DB_MIN, Math.min(DB_MAX, db))) / (DB_MAX - DB_MIN)) * (H - T - B);
   const yPhase = (deg: number) => T + ((180 - deg) / 360) * (H - T - B);
@@ -30,9 +32,14 @@
     `${i === 0 || Math.abs(p - total.phase[i - 1]) > 180 ? "M" : "L"}${x(freqs[i]).toFixed(1)} ${yPhase(p).toFixed(1)}`).join(""));
   const area = $derived(single ? `${line(single.db, y)}L${x(hi).toFixed(1)} ${y(0).toFixed(1)}L${x(lo).toFixed(1)} ${y(0).toFixed(1)}Z` : "");
 
-  const GRID_F = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+  // 1-2-5 lines; a narrow section gets the lines in between as well
+  const GRID_F = $derived.by(() => {
+    const dense = hi / lo < 30, out: number[] = [];
+    for (let p = 10; p <= 10000; p *= 10) for (const k of dense ? [1, 1.5, 2, 3, 4, 5, 7] : [1, 2, 5]) out.push(k * p);
+    return [...out, 100000].filter((f) => f >= lo && f <= hi);
+  });
   const GRID_DB = [-30, -24, -18, -12, -6, 0, 6, 12, 18];
-  const fmtF = (f: number) => (f >= 1000 ? `${f / 1000}k` : String(f));
+  const fmtF = (f: number) => (f >= 1000 ? `${+(f / 1000).toFixed(1)}k` : String(f));
   const handleDb = (bq: Biquad) => (typeInfo(bq.type)?.gain ? bq.gain / 10 : 0);
 
   let svg: SVGSVGElement | undefined = $state();
@@ -77,7 +84,7 @@
   {/if}
   {#if area}<path class="single" d={area} />{/if}
   <path class="total" d={line(total.db, y)} />
-  {#each active as f}
+  {#each active.filter((f) => f.bq.f >= lo && f.bq.f <= hi) as f}
     <g class="handle" class:sel={f.n === selected} transform="translate({x(f.bq.f)} {y(handleDb(f.bq))})">
       <circle r="11" role="slider" tabindex="0" aria-label="Filter {f.label ?? f.n}: {f.bq.f} Hz" aria-valuenow={f.bq.f}
         aria-valuemin={freq[0]} aria-valuemax={freq[1]}

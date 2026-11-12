@@ -141,3 +141,24 @@ export function chainResponse(list: Coeffs[], freqs: number[], rate: number): Cu
   }
   return { db, phase };
 }
+
+/**
+ * Frequency range worth showing for a set of filters: from below the lowest to above the highest
+ * filter frequency, with a margin of one octave and at least `marginHz`, inside `full`. Without
+ * filters (or when they span nearly everything) the full range.
+ */
+export function viewRange(freqs: number[], full: [number, number], marginHz = 750): [number, number] {
+  const f = freqs.filter((x) => x > 0);
+  if (!f.length) return full;
+  const lo = Math.max(full[0], Math.min(Math.min(...f) / 2, Math.min(...f) - marginHz));
+  const hi = Math.min(full[1], Math.max(Math.max(...f) * 2, Math.max(...f) + marginHz));
+  // nice ends: down/up to 1-2-5 steps
+  const nice = (v: number, up: boolean) => {
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    const steps = [1, 2, 5, 10];
+    const m = v / p;
+    const k = up ? steps.find((x) => x >= m - 1e-9)! : [...steps].reverse().find((x) => x <= m + 1e-9)!;
+    return k * p;
+  };
+  return [Math.max(full[0], nice(lo, false)), Math.min(full[1], nice(hi, true))];
+}

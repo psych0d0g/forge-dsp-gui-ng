@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fx from "./fixtures/biquad.json";
-import { chainResponse, coeffs, logFreqs, response, TYPES, BYPASS } from "../src/lib/dsp/biquad";
+import { chainResponse, coeffs, logFreqs, response, TYPES, BYPASS, viewRange } from "../src/lib/dsp/biquad";
 
 /** 5.23 two's complement in 28 bits */
 const fix = (h: string) => { let x = parseInt(h, 16) & 0x0fffffff; if (x & 0x08000000) x -= 1 << 28; return x / 8388608; };
@@ -43,5 +43,16 @@ describe("response", () => {
     const lp = coeffs({ type: 3, f: 2000, gain: 0, q: 0, b: 0, flags: 128 }, 96000);
     expect(chainResponse([lp, lp], [2000], 96000).db[0]).toBeCloseTo(-6.02, 1);
     expect(logFreqs(10, 1000, 3)).toEqual([10, 100, 1000]);
+  });
+});
+
+describe("section of the curve", () => {
+  const full: [number, number] = [10, 22000];
+  it("an octave and at least 750 Hz around the filters, on 1-2-5 ends, inside the full range", () => {
+    expect(viewRange([3200, 6300, 12000], full)).toEqual([1000, 22000]);     // 1600 -> 1000; 24000 -> capped
+    expect(viewRange([80, 320], full)).toEqual([10, 2000]);                   // 80 - 750 < 10; 320 + 750 = 1070 -> 2000
+    expect(viewRange([1000], full)).toEqual([200, 2000]);                     // 250 -> 200; 2000
+    expect(viewRange([], full)).toEqual(full);
+    expect(viewRange([0], full)).toEqual(full);
   });
 });
