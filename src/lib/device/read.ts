@@ -39,6 +39,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
   { reg: "system.temperature.celsius" },
   { reg: "biquad.clickless", port: true },
   { reg: "system.supply", port: true },
+  { reg: "system.vu", port: true },
   { reg: "modc.version.attributes" },
   { reg: "modc.*" },
   { reg: "mixer.*", slow: true },
@@ -84,3 +85,8 @@ export async function readDevice(
 export function exportState(state: DeviceState): string {
   return JSON.stringify({ format: "forge-dsp-gui-ng/state", version: 1, state }, null, 1);
 }
+
+/** values that change on their own: read again from time to time (`port` as above) */
+export const STATUS_REGS: { reg: string; port?: boolean }[] = [
+  { reg: "system.temperature.celsius" }, { reg: "system.errors" }, { reg: "system.supply", port: true },
+];

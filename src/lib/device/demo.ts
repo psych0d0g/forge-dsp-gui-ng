@@ -28,6 +28,7 @@ export function demoState(): DeviceState {
   s.clickless = 1;
   s.supply = [1, 13800];
   s.temperature = 38.5;
+  s.vu = [0, 0, 0, 0, 0, 0, 215, 213];
   return s;
 }
 
@@ -38,7 +39,12 @@ export class DemoTransport implements Transport {
   async write(line: string) {
     const m = /^(get|set)\.(\S+) ([^=;\s]+)/.exec(line);
     if (!m) return;
-    const out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
+    let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
+    if (m[1] === "get" && m[3] === "system.vu") {  // music-like movement on the digital input
+      const t = Date.now() / 1000;
+      const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));
+      out = ` <.1 system.vu=[0,0,0,0,0,0,${l},${l - 3 + Math.round(3 * Math.sin(t * 5))}]`;
+    } else if (m[1] === "get" && m[3] === "system.temperature.celsius") out = " <.1 system.temperature.celsius=38.50";
     setTimeout(() => this.fn(out), 15);
   }
   onLine(fn: (l: string) => void) { this.fn = fn; }

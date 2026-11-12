@@ -4,6 +4,7 @@
   import { webSerialAvailable } from "./lib/transport/webserial";
   import { servedByBridge } from "./lib/transport/websocket";
   import Icon from "./components/Icon.svelte";
+  import VuMeter from "./components/VuMeter.svelte";
   import Overview from "./pages/Overview.svelte";
   import Inputs from "./pages/Inputs.svelte";
   import Outputs from "./pages/Outputs.svelte";
@@ -91,6 +92,7 @@
       <div><strong>{title}</strong>
         <span class="muted sub">{online ? `${app.transportName}${app.demo ? " (ohne Gerät)" : ""}` : app.status === "offline" ? "nicht verbunden" : "verbinde …"}</span></div>
     </div>
+    {#if online}<VuMeter />{/if}
     <div class="actions">
       {#if online}
         {#if !app.demo}<button class="ghost" title="Alles neu einlesen" onclick={reload}><Icon name="refresh" /></button>{/if}

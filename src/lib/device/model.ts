@@ -76,6 +76,9 @@ export interface DeviceState {
   /** port extensions, null when the firmware does not have them */
   clickless: number | null;
   supply: Value | null;
+  /** input levels in1..in8 in the gain scale (255 = 0 dBFS RMS, 0.5 dB per step); null = the
+   * firmware has no system.vu (forge-dsp-firmware#52) */
+  vu: number[] | null;
   /** MCU temperature in °C */
   temperature: number | null;
 }
@@ -100,6 +103,7 @@ export function emptyState(): DeviceState {
     errors: [],
     clickless: null,
     supply: null,
+    vu: null,
     temperature: null,
   };
 }
@@ -184,6 +188,9 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
         case "errors":
           s.errors = Array.isArray(v) ? v.map((e) => nums(e)) : [];
           return true;
+        case "vu":
+          if (p.length === 2) { s.vu = nums(v); return true; }
+          return false;
         case "supply":
           if (p.length === 2) { s.supply = v; return true; }
           return false;
@@ -267,3 +274,13 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
 export const modcTypeVersion = (s: DeviceState, type: number) => s.modcVersions[type & 0x3f] ?? 0;
 
 export const isPort = (s: DeviceState) => s.identity.port !== null;
+
+/** Stereo pairs of the inputs for the level meter, [left, right] as 1-based input numbers.
+ * From the DSP analysis (forge-dsp-firmware#43); left/right still to be confirmed on a device (#52). */
+export const INPUT_PAIRS: { label: string; in: [number, number] }[] = [
+  { label: "Kanal 1", in: [6, 5] }, { label: "Kanal 2", in: [4, 3] }, { label: "Kanal 3", in: [2, 1] },
+  { label: "Digital", in: [7, 8] },
+];
+
+/** level in dBFS from the gain-scale value of system.vu; 0 = no signal */
+export const vuToDb = (v: number) => (v > 0 ? (v - 255) / 2 : -Infinity);

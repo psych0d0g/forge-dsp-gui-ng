@@ -3,7 +3,7 @@ import { ForgeClient, type Value } from "./protocol";
 import type { Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
 import { openWebSocket } from "./transport/websocket";
-import { applyAnswer, emptyState, readDevice, type DeviceState, type ReadProgress } from "./device";
+import { applyAnswer, emptyState, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
 export type PageId = "overview" | "inputs" | "mixer" | "filters" | "delay" | "outputs" | "modc" | "presets"
@@ -29,6 +29,7 @@ function attach(t: Transport) {
   transport = t;
   client = new ForgeClient(t);
   client.onRaw((text, dir) => {
+    if (polling) return;  // the periodic status reads would flood the console
     app.log.push({ dir, text: text.trimEnd() });
     if (app.log.length > 400) app.log.splice(0, app.log.length - 400);
   });
@@ -121,3 +122,35 @@ export function write(reg: string, value: Value) {
     app.writing--;
   })();
 }
+
+// --- values that change on their own (#13) ------------------------------------------------------
+// Only while online, visible and idle (never between the writes of a slider). The level meter is
+// read a few times per second, temperature, error counters and supply every few seconds.
+const VU_MS = 200;
+const STATUS_EVERY = 25;  // x VU_MS = 5 s
+let polling = false;
+let tick = 0;
+
+async function poll() {
+  const c = client;
+  if (!c || polling || app.status !== "online" || app.writing > 0) return;
+  if (typeof document !== "undefined" && document.hidden) return;
+  tick++;
+  const regs: string[] = [];
+  if (app.device.vu !== null) regs.push("system.vu");
+  if (tick % STATUS_EVERY === 0)
+    for (const r of STATUS_REGS) if (!r.port || isPort(app.device)) regs.push(r.reg);
+  if (!regs.length) return;
+  polling = true;
+  try {
+    for (const reg of regs) {
+      if (client !== c || app.writing > 0) break;
+      for (const a of await c.get(reg)) applyAnswer(app.device, a);
+    }
+  } catch {
+    /* a missed status read is harmless, the next one follows */
+  } finally {
+    polling = false;
+  }
+}
+if (typeof window !== "undefined") setInterval(poll, VU_MS);
