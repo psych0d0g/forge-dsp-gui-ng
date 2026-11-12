@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick, untrack } from "svelte";
   import { app, outName, write } from "../lib/app.svelte";
   import { isPort, limitsOf, type Biquad } from "../lib/device";
   import { isActive, typeInfo, TYPES } from "../lib/dsp/biquad";
@@ -19,7 +20,28 @@
     if (!channels.includes(ch)) ch = channels.find((c) => c < 30) ?? channels[0] ?? 0;
   });
   const slots = $derived(Object.entries(d.biquads[ch] ?? {}).map(([n, bq]) => ({ n: Number(n), bq })).sort((a, b) => a.n - b.n));
-  const used = $derived(slots.filter((s) => s.bq.type !== 0));
+  // Filters line up by frequency. The order is only taken over when an interaction ends (pointer
+  // released, field left, filter added or removed), so nothing moves away under the hand.
+  let order = $state<number[]>([]);
+  const byFreq = () => slots.filter((s) => s.bq.type !== 0).sort((a, b) => a.bq.f - b.bq.f || a.n - b.n).map((s) => s.n);
+  async function resort() {
+    const next = byFreq();
+    if (next.length === order.length && next.every((n, i) => n === order[i])) return;
+    const el = document.activeElement as HTMLElement | null;
+    order = next;
+    await tick();
+    if (el && el.isConnected && document.activeElement !== el) el.focus();  // moving a node may drop the focus
+  }
+  $effect(() => {
+    ch;
+    order = untrack(byFreq);  // only the channel is a dependency
+  });
+  const used = $derived([
+    ...order.map((n) => slots.find((s) => s.n === n)).filter((s): s is { n: number; bq: Biquad } => !!s && s.bq.type !== 0),
+    ...slots.filter((s) => s.bq.type !== 0 && !order.includes(s.n)),  // just added, not sorted in yet
+  ]);
+  /** running number of a filter in this order (the slot number of the device is an internal detail) */
+  const pos = (n: number) => used.findIndex((s) => s.n === n) + 1;
   let selected = $state<number | null>(null);
   let showPhase = $state(false);
   let linked = $state(false);
@@ -53,10 +75,12 @@
     if (!free) return;
     update(free.n, { type: 1, f: 1000, gain: 0, q: 1414, b: 0, flags: 128 });
     selected = free.n;
+    resort();
   }
   function remove(n: number) {
     update(n, { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 });
     if (selected === n) selected = null;
+    resort();
   }
   // The upright fader of a strip sets the gain; for types without gain (crossovers, all passes)
   // it sets the frequency on a logarithmic scale.
@@ -91,8 +115,11 @@
     const v = Number(el.value.replace(",", "."));
     if (!Number.isNaN(v)) update(n, { [key]: clamp(Math.round(v * scale), range) });
     el.value = String(d.biquads[ch][n][key] / scale);
+    resort();
   }
 </script>
+
+<svelte:window onpointerup={resort} />
 
 <header class="head">
   <div>
@@ -120,7 +147,7 @@
         <input type="checkbox" bind:checked={linked} /> mit {chName(partner(ch))} koppeln</label>
     {/if}
   </div>
-  <ResponsePlot filters={slots} {rate} freq={lim.freq} gainRange={lim.bqGain} {selected} {showPhase}
+  <ResponsePlot filters={used.map((s, i) => ({ ...s, label: i + 1 }))} {rate} freq={lim.freq} gainRange={lim.bqGain} {selected} {showPhase}
     onselect={(n) => (selected = n)}
     onmove={(n, f, g) => update(n, g === null ? { f } : { f, gain: g })}
     onq={(n, k) => update(n, { q: clamp(Math.round(d.biquads[ch][n].q * k), lim.bqQ) })} />
@@ -136,12 +163,12 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="strip" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
         <div class="striphead">
-          <span class="nr num">{n}</span>
+          <span class="nr num">{pos(n)}</span>
           <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Filter ein/aus"
             onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
           <button class="ghost del" title="Filter entfernen" aria-label="Filter {n} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
         </div>
-        <select value={bq.type} aria-label="Typ Filter {n}" title={t?.name ?? ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
+        <select value={bq.type} aria-label="Typ Filter {pos(n)}" title={t?.name ?? ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
           {#if !t}<option value={bq.type}>Typ {bq.type}</option>{/if}
           {#each groups as g}
             <optgroup label={g}>

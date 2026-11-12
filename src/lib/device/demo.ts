@@ -32,7 +32,8 @@ export function demoState(): DeviceState {
     for (let n = 1; n <= (ch > 30 ? 72 : ch % 4 === 1 || ch % 4 === 2 ? 60 : 38); n++) s.biquads[ch][n] = { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 };
   }
   const on = (type: number, f: number, gain = 0, q = 707, b = 0) => ({ type, f, gain, q, b, flags: 128 });
-  for (const ch of [1, 2]) { s.biquads[ch][1] = on(9, 3200); s.biquads[ch][2] = on(9, 3200); s.biquads[ch][3] = on(1, 6300, -35, 2000); }
+  // slots in the device are in no particular order; the page lines the filters up by frequency
+  for (const ch of [1, 2]) { s.biquads[ch][1] = on(1, 6300, -35, 2000); s.biquads[ch][2] = on(9, 3200); s.biquads[ch][3] = on(15, 12000, 15); s.biquads[ch][4] = on(9, 3200); }
   for (const ch of [3, 4]) { s.biquads[ch][1] = on(9, 320); s.biquads[ch][2] = on(3, 3200); s.biquads[ch][3] = on(3, 3200); s.biquads[ch][4] = on(1, 1250, -40, 3000); s.biquads[ch][5] = on(15, 9000, 20); }
   for (const ch of [5, 6]) { s.biquads[ch][1] = on(9, 70); s.biquads[ch][2] = on(3, 320); s.biquads[ch][3] = on(1, 125, -50, 4000); }
   for (const ch of [7, 8]) { s.biquads[ch][1] = on(13, 28, 0, 900); s.biquads[ch][2] = on(3, 70); s.biquads[ch][3] = on(3, 70); s.biquads[ch][4] = on(1, 45, 30, 2500); s.biquads[ch][5] = on(22, 70, 0, 707, 60); }

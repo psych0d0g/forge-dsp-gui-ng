@@ -5,7 +5,7 @@
   import { chainResponse, coeffs, isActive, logFreqs, typeInfo } from "../lib/dsp/biquad";
 
   let { filters, rate, freq, gainRange, selected, showPhase, onselect, onmove, onq }: {
-    filters: { n: number; bq: Biquad }[]; rate: number; freq: [number, number]; gainRange: [number, number];
+    filters: { n: number; bq: Biquad; label?: number }[]; rate: number; freq: [number, number]; gainRange: [number, number];
     selected: number | null; showPhase: boolean; onselect: (n: number) => void;
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
   } = $props();
@@ -79,11 +79,11 @@
   <path class="total" d={line(total.db, y)} />
   {#each active as f}
     <g class="handle" class:sel={f.n === selected} transform="translate({x(f.bq.f)} {y(handleDb(f.bq))})">
-      <circle r="11" role="slider" tabindex="0" aria-label="Filter {f.n}: {f.bq.f} Hz" aria-valuenow={f.bq.f}
+      <circle r="11" role="slider" tabindex="0" aria-label="Filter {f.label ?? f.n}: {f.bq.f} Hz" aria-valuenow={f.bq.f}
         aria-valuemin={freq[0]} aria-valuemax={freq[1]}
         onpointerdown={(e) => down(e, f.n)} onpointermove={(e) => move(e, f)} onpointerup={() => (dragging = null)}
         onpointercancel={() => (dragging = null)} onwheel={(e) => wheel(e, f)} onfocus={() => onselect(f.n)} />
-      <text y="4" text-anchor="middle">{f.n}</text>
+      <text y="4" text-anchor="middle">{f.label ?? f.n}</text>
     </g>
   {/each}
 </svg>
