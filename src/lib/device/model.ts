@@ -277,9 +277,22 @@ export const modcTypeVersion = (s: DeviceState, type: number) => s.modcVersions[
 
 export const isPort = (s: DeviceState) => s.identity.port !== null;
 
-/** Stereo pairs of the inputs for the level meter, as input numbers (= mixer columns G: 1..6
- * analog, 7/8 digital). system.vu is expected in this numbering (forge-dsp-firmware#52). */
-export const INPUT_PAIRS: { in: [number, number] }[] = [{ in: [1, 2] }, { in: [3, 4] }, { in: [5, 6] }, { in: [7, 8] }];
+/** Inputs are numbered as the mixer columns G (= gain.in.N, then gain.spdif): each stereo input
+ * takes two numbers, the odd one is its right, the even one its left channel (original GUI, page
+ * INMI21: labels R;L;R;L…). 1..analog = analog inputs, the rest digital. */
+export const inputSide = (n: number) => (n % 2 ? "R" : "L");
+export const inputPairOf = (n: number) => Math.ceil(n / 2);
+/** default name of input n: "Eingang 2 L", "Digital R" */
+export function inputDefaultName(n: number, analog = 6): string {
+  return n <= analog ? `Eingang ${inputPairOf(n)} ${inputSide(n)}` : `Digital ${inputSide(n)}`;
+}
+/** input numbers in display order: left before right within each pair */
+export const inputsLeftFirst = (count: number) =>
+  Array.from({ length: count }, (_, i) => (i % 2 ? i : i + 2)).filter((n) => n <= count);
+
+/** Stereo pairs for the level meter as [left, right] input numbers. system.vu is expected in this
+ * numbering (forge-dsp-firmware#52). */
+export const INPUT_PAIRS: { in: [number, number] }[] = [{ in: [2, 1] }, { in: [4, 3] }, { in: [6, 5] }, { in: [8, 7] }];
 
 /** level in dBFS from the gain-scale value of system.vu; 0 = no signal */
 export const vuToDb = (v: number) => (v > 0 ? (v - 255) / 2 : -Infinity);

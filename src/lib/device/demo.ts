@@ -27,13 +27,15 @@ export function demoState(): DeviceState {
   }
   ["Hochton L", "Hochton R", "Mittelton L", "Mittelton R", "Tiefton L", "Tiefton R", "Sub L", "Sub R"]
     .forEach((n, i) => (s.channelNames[i + 1] = n));
-  for (let ch = 1; ch <= 8; ch++) {
+  for (const ch of [1, 2, 3, 4, 5, 6, 7, 8, 35, 36]) {
     s.biquads[ch] = {};
-    for (let n = 1; n <= 8; n++) s.biquads[ch][n] = { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 };
+    for (let n = 1; n <= (ch > 30 ? 72 : ch % 4 === 1 || ch % 4 === 2 ? 60 : 38); n++) s.biquads[ch][n] = { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 };
   }
-  s.biquads[1][1] = { type: 9, f: 3200, gain: 0, q: 707, b: 0, flags: 128 };
-  s.biquads[5][1] = { type: 3, f: 320, gain: 0, q: 707, b: 0, flags: 128 };
-  s.biquads[5][2] = { type: 1, f: 63, gain: 30, q: 1414, b: 0, flags: 128 };
+  const on = (type: number, f: number, gain = 0, q = 707, b = 0) => ({ type, f, gain, q, b, flags: 128 });
+  for (const ch of [1, 2]) { s.biquads[ch][1] = on(9, 3200); s.biquads[ch][2] = on(9, 3200); s.biquads[ch][3] = on(1, 6300, -35, 2000); }
+  for (const ch of [3, 4]) { s.biquads[ch][1] = on(9, 320); s.biquads[ch][2] = on(3, 3200); s.biquads[ch][3] = on(3, 3200); s.biquads[ch][4] = on(1, 1250, -40, 3000); s.biquads[ch][5] = on(15, 9000, 20); }
+  for (const ch of [5, 6]) { s.biquads[ch][1] = on(9, 70); s.biquads[ch][2] = on(3, 320); s.biquads[ch][3] = on(1, 125, -50, 4000); }
+  for (const ch of [7, 8]) { s.biquads[ch][1] = on(13, 28, 0, 900); s.biquads[ch][2] = on(3, 70); s.biquads[ch][3] = on(3, 70); s.biquads[ch][4] = on(1, 45, 30, 2500); s.biquads[ch][5] = on(22, 70, 0, 707, 60); }
   s.preset = { loaded: 1, select: 255 };
   s.clickless = 1;
   s.supply = [1, 13800];

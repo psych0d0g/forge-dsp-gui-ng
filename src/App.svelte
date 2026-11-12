@@ -11,6 +11,7 @@
   import Console from "./pages/Console.svelte";
   import Delay from "./pages/Delay.svelte";
   import Mixer from "./pages/Mixer.svelte";
+  import Filters from "./pages/Filters.svelte";
   import Planned from "./pages/Planned.svelte";
 
   const version = __APP_VERSION__;
@@ -24,7 +25,7 @@
     { group: "Gerät", items: [{ id: "overview", label: "Übersicht", ready: true }] },
     { group: "Signalweg", items: [
       { id: "inputs", label: "Eingänge", ready: true }, { id: "mixer", label: "Mixer", ready: true },
-      { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit", ready: true },
+      { id: "filters", label: "Filter & EQ", ready: true }, { id: "delay", label: "Laufzeit", ready: true },
       { id: "outputs", label: "Ausgänge", ready: true }] },
     { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
     { group: "Werkzeuge", items: [
@@ -32,7 +33,6 @@
       { id: "console", label: "Konsole", ready: true }] },
   ];
   const PLANNED: Partial<Record<PageId, { title: string; text: string; issue: number }>> = {
-    filters: { title: "Filter & EQ", issue: 5, text: "Weichen, parametrischer EQ und Allpässe je Kanal, mit Frequenz- und Phasengang." },
     modc: { title: "Steuerblöcke", issue: 7, text: "Lautstärke, Loudness, Eingangsumschaltung, Mono und weitere Blöcke mit ihren Ereignissen." },
     presets: { title: "Presets", issue: 8, text: "Abstimmungen laden, speichern, kopieren und als Datei sichern." },
     diagnose: { title: "Diagnose", issue: 9, text: "Bausteine auf den I2C-Bussen, Empfänger- und DAC-Status, Versorgung, Diagnosebericht." },
@@ -147,6 +147,7 @@
     {:else if app.page === "outputs"}<Outputs />
     {:else if app.page === "delay"}<Delay />
     {:else if app.page === "mixer"}<Mixer />
+    {:else if app.page === "filters"}<Filters />
     {:else if app.page === "console"}<Console />
     {:else if PLANNED[app.page]}<Planned {...PLANNED[app.page]!} />
     {/if}

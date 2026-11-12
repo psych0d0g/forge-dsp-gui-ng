@@ -3,7 +3,7 @@ import { ForgeClient, type Value } from "./protocol";
 import type { Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
 import { openWebSocket } from "./transport/websocket";
-import { applyAnswer, emptyState, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress } from "./device";
+import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
 export type PageId = "overview" | "inputs" | "mixer" | "filters" | "delay" | "outputs" | "modc" | "presets"
@@ -158,7 +158,8 @@ if (typeof window !== "undefined") setInterval(poll, VU_MS);
 
 // --- channel names --------------------------------------------------------------------------------
 // Outputs: in the device (system.channel.name.N). Inputs: the firmware has no place for them yet
-// (forge-dsp-firmware#55), so they live in this browser, per device serial. Default: the number.
+// (forge-dsp-firmware#55), so they live in this browser, per device serial. Default: the number
+// of the stereo input with its side.
 const inNames = $state<Record<number, string>>({});
 const serialOf = () => app.device.identity.keyInfo.split("-")[3] || "unknown";
 const namesKey = () => `forge-in-names:${serialOf()}`;
@@ -178,7 +179,10 @@ export function cleanName(t: string): string {
 }
 
 export const outName = (ch: number) => app.device.channelNames[ch] || `Ausgang ${ch}`;
-export const inName = (n: number) => inNames[n] || `Eingang ${n}`;
+export const inDefault = (n: number) => inputDefaultName(n, app.device.gain.in.length || 6);
+export const inName = (n: number) => inNames[n] || inDefault(n);
+/** short caption where the group already says "Analog"/"Digital": "2 L", "R"; a given name as it is */
+export const inShort = (n: number) => inNames[n] || inDefault(n).replace(/^Eingang |^Digital /, "");
 export const outNameRaw = (ch: number) => app.device.channelNames[ch] ?? "";
 export const inNameRaw = (n: number) => inNames[n] ?? "";
 

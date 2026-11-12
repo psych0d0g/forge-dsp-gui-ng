@@ -19,7 +19,10 @@
       const d = Math.max(vuToDb(vu[p.in[0] - 1] ?? 0), vuToDb(vu[p.in[1] - 1] ?? 0));
       if (d > bestDb) { bestDb = d; best = p; }
     }
-    label = bestDb > FLOOR ? `${inName(best.in[0])} / ${inName(best.in[1])}` : "kein Signal";
+    // "Eingang 2" / "Digital" for default names, otherwise the user's names
+    const [l, r] = best.in.map(inName);
+    const common = l.replace(/ L$/, "");
+    label = bestDb <= FLOOR ? "kein Signal" : common !== l && r === `${common} R` ? common : `${l} / ${r}`;
     const now = best.in.map((i) => Math.max(FLOOR, vuToDb(vu[i - 1] ?? 0))) as [number, number];
     const prev = untrack(() => shown);  // not a dependency: only a new reading moves the bars
     shown = [Math.max(now[0], prev[0] - FALL_DB), Math.max(now[1], prev[1] - FALL_DB)];

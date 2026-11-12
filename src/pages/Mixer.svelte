@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { app, inName, outName, write } from "../lib/app.svelte";
-  import { limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames } from "../lib/device";
+  import { app, inName, inShort, outName, write } from "../lib/app.svelte";
+  import { inputSide, inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames } from "../lib/device";
   import Knob from "../components/Knob.svelte";
 
   const d = $derived(app.device);
@@ -13,7 +13,7 @@
   const grid = $derived(d.mixer.values[profile] ?? {});
   const sources = $derived(sourceNames(d));
   const BUS = ["Bus A", "Bus B"];
-  const inputs = Array.from({ length: MIXER_INPUTS }, (_, i) => i + 1);
+  const inputs = inputsLeftFirst(MIXER_INPUTS);  // left before right within each stereo input
   // sources in groups: analog inputs (as many as gain.in has, 6), digital (the rest), the buses
   const analog = $derived(Math.min(MIXER_INPUTS, d.gain.in.length || 6));
   const srcGroups = $derived([
@@ -21,7 +21,7 @@
     { label: "Digital", cols: inputs.filter((g) => g > analog) },
     { label: "Bus", cols: MIXER_BUS_COLUMNS },
   ]);
-  const groupStart = (g: number) => g === analog + 1 || g === MIXER_INPUTS + 1;
+  const groupStart = (g: number) => g === analog + 2 || g === MIXER_INPUTS + 1;  // first column of Digital / Bus
 
   // Destinations: the two buses, then the outputs; shown two at a time (a stereo pair).
   interface Dest { row: number; label: string; nr: string }
@@ -85,7 +85,7 @@
   <!-- routing at a glance; a click selects the destination -->
   <section class="panel map" aria-label="Routing-Übersicht">
     <h3>Routing</h3>
-    <div class="maphead"><span></span>{#each [...inputs, ...MIXER_BUS_COLUMNS] as g}<span class="num" class:gs={groupStart(g)} title={colName(g)}>{g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : g}</span>{/each}</div>
+    <div class="maphead"><span></span>{#each [...inputs, ...MIXER_BUS_COLUMNS] as g}<span class="num" class:gs={groupStart(g)} title={colName(g)}>{g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : inputSide(g)}</span>{/each}</div>
     {#each groups as grp, gi}
       <button class="maprow" class:on={group === gi} aria-pressed={group === gi} onclick={() => (group = gi)}>
         {#each grp as dst}
@@ -114,7 +114,8 @@
                 <div class="sgknobs">
                   {#each sg.cols as g}
                     {#if has(dst.row, g)}
-                      <Knob value={grid[dst.row][g]} min={lim.mixer[0]} max={lim.mixer[1]} caption={colName(g)} unit="%"
+                      <Knob value={grid[dst.row][g]} min={lim.mixer[0]} max={lim.mixer[1]} unit="%"
+                        caption={g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : inShort(g)}
                         label="{colName(g)} auf {dst.label}" onchange={(v) => set(dst.row, g, v)} />
                     {/if}
                   {/each}
