@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, writeRaw } from "../lib/app.svelte";
-  import { availableTypes, emptyModc, eventOptions, modcName, modcText, modcType, type Modc } from "../lib/device";
+  import { availableTypes, emptyModc, eventOptions, modcName, modcText, modcType, wordGet, wordSet, type Field, type Modc } from "../lib/device";
   import Icon from "../components/Icon.svelte";
 
   const d = $derived(app.device);
@@ -10,7 +10,9 @@
   const events = $derived(eventOptions(total));
   let sel = $state<number | null>(null);
   $effect(() => {
-    if (sel === null && used.length) sel = used[0];
+    if (sel !== null || !used.length) return;
+    const want = Number(new URLSearchParams(location.search).get("block"));  // ?block=N opens that block
+    sel = used.includes(want) ? want : used[0];
   });
   let raw = $state(false);
   let err = $state("");
@@ -44,8 +46,20 @@
     d.modc[sel] = { ...emptyModc(), type };  // the fields of another type mean something else
     send(sel);
   }
-  const label = (list: string[] | undefined, i: number, fallback: string) => (list ? list[i] : fallback);
-  const shown = (list: string[] | undefined, i: number) => raw || !list || list[i] !== "";
+  // typed fields of the dialog
+  const dec = (n: number) => String(+n.toFixed(2)).replace(".", ",");
+  const numOf = (e: Event) => Number((e.currentTarget as HTMLInputElement).value.replace(",", "."));
+  function setByte(f: Extract<Field, { kind: "byte" }>, e: Event) {
+    const v = numOf(e);
+    if (!Number.isNaN(v)) change((b) => (b[f.of][f.i - 1] = Math.max(0, Math.min(255, Math.round(v / (f.mul ?? 1))))));
+    (e.currentTarget as HTMLInputElement).value = dec(m![f.of][f.i - 1] * (f.mul ?? 1));
+  }
+  function setWord(f: Extract<Field, { kind: "word" }>, e: Event) {
+    const div = f.div ?? 1, lo = f.min ?? (f.signed ? -32768 / div : 0), hi = f.max ?? (f.signed ? 32767 : 65535) / div;
+    const v = numOf(e);
+    if (!Number.isNaN(v)) change((b) => wordSet(b.sets, f.i, Math.max(lo, Math.min(hi, v)) * div));
+    (e.currentTarget as HTMLInputElement).value = dec(wordGet(m!.sets, f.i, f.signed) / div);
+  }
 </script>
 
 <header class="head">
@@ -87,69 +101,64 @@
       {#if t}<p class="muted">{t.help}</p>{:else}<p class="muted">Für diesen Typ sind die Felder nicht beschrieben; unten stehen die Rohwerte.</p>{/if}
       <p class="muted small">Sein Ergebnis gibt der Block als Ereignis <span class="num">{96 + sel}</span> aus.</p>
 
-      {#each t?.bits ?? [] as bf}
-        <div class="group">
-          <h3>Wirkt auf</h3>
-          <div class="bits">
-            {#each bf.labels as l, bit}
-              {#if l}
-                <label class="check"><input type="checkbox" checked={!!(m.flags[bf.flag - 1] & (1 << bit))}
-                  onchange={() => change((b) => (b.flags[bf.flag - 1] ^= 1 << bit))} /> {l}</label>
-              {/if}
-            {/each}
-          </div>
-        </div>
-      {/each}
-
-      <div class="group">
-        <h3>Ereignisse</h3>
-        <div class="fields">
-          {#each m.events as ev, i}
-            {#if shown(t?.events, i)}
-              <label class="fld"><span>{label(t?.events, i, `Ereignis ${i + 1}`) || `Ereignis ${i + 1}`}</span>
+      {#if t?.fields && !raw}
+        <div class="fields typed">
+          {#each t.fields as f}
+            {#if f.kind === "event"}
+              {@const ev = m.events[f.i - 1]}
+              <label class="fld"><span>{f.label}</span>
                 <span class="evt">
-                  <input class="num" value={ev} inputmode="numeric" onchange={(e) => change((b) => (b.events[i] = byte(e)))} />
-                  <select value={events.some((o) => o.value === ev) ? ev : -1} aria-label="Ereignis wählen"
-                    onchange={(e) => change((b) => (b.events[i] = Number(e.currentTarget.value)))}>
+                  <input class="num" value={ev} inputmode="numeric" onchange={(e) => change((b) => (b.events[f.i - 1] = byte(e)))} />
+                  <select value={events.some((o) => o.value === ev) ? ev : -1} aria-label="{f.label}: Ereignis wählen"
+                    onchange={(e) => change((b) => (b.events[f.i - 1] = Number(e.currentTarget.value)))}>
                     {#if !events.some((o) => o.value === ev)}<option value={-1}>eigener Wert</option>{/if}
                     {#each events as o}<option value={o.value}>{o.label}</option>{/each}
                   </select>
                 </span></label>
+            {:else if f.kind === "byte"}
+              <label class="fld"><span>{f.label}</span>
+                <span class="unit"><input class="num short" value={dec(m[f.of][f.i - 1] * (f.mul ?? 1))} inputmode="decimal" onchange={(e) => setByte(f, e)} />
+                  {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{f.hint}</em>{/if}</span></label>
+            {:else if f.kind === "word"}
+              <label class="fld"><span>{f.label}</span>
+                <span class="unit"><input class="num short" value={dec(wordGet(m.sets, f.i, f.signed) / (f.div ?? 1))} inputmode="decimal" onchange={(e) => setWord(f, e)} />
+                  {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{f.hint}</em>{/if}</span></label>
+            {:else if f.kind === "choice"}
+              {@const cur = m[f.of][f.i - 1] - (f.first ?? 0)}
+              <label class="fld"><span>{f.label}</span>
+                <select value={cur} onchange={(e) => change((b) => (b[f.of][f.i - 1] = Number(e.currentTarget.value) + (f.first ?? 0)))}>
+                  {#if cur < 0 || cur >= f.options.length}<option value={cur}>Wert {m[f.of][f.i - 1]}</option>{/if}
+                  {#each f.options as o, k}<option value={k}>{o}</option>{/each}
+                </select></label>
+            {:else if f.kind === "bits"}
+              <div class="fld wide"><span>{f.label}</span>
+                <div class="bits">
+                  {#each f.bits as l, bit}
+                    {#if l}
+                      <label class="check"><input type="checkbox" checked={!!(m[f.of][f.i - 1] & (1 << bit))}
+                        onchange={() => change((b) => (b[f.of][f.i - 1] ^= 1 << bit))} /> {l}</label>
+                    {/if}
+                  {/each}
+                </div></div>
             {/if}
           {/each}
         </div>
-      </div>
-
-      {#if raw || !t?.sets || t.sets.some((x) => x)}
-        <div class="group">
-          <h3>Werte</h3>
-          <div class="fields">
-            {#each m.sets as v, i}
-              {#if shown(t?.sets, i)}
-                <label class="fld"><span>{label(t?.sets, i, `Set ${i + 1}`) || `Set ${i + 1}`}</span>
-                  <input class="num short" value={v} inputmode="numeric" onchange={(e) => change((b) => (b.sets[i] = byte(e)))} /></label>
-              {/if}
-            {/each}
+      {:else}
+        {#each [["events", "Ereignis"], ["sets", "Set"], ["flags", "Flags"]] as const as [of, name]}
+          <div class="group">
+            <h3>{of === "events" ? "Ereignisse" : of === "sets" ? "Werte (Sets)" : "Flags"}</h3>
+            <div class="fields">
+              {#each m[of] as v, i}
+                <label class="fld"><span>{name} {i + 1}</span>
+                  <input class="num short" value={v} inputmode="numeric" onchange={(e) => change((b) => (b[of][i] = byte(e)))} /></label>
+              {/each}
+            </div>
           </div>
-        </div>
-      {/if}
-
-      {#if raw || !t?.flags && !t?.bits || t?.flags?.some((x) => x)}
-        <div class="group">
-          <h3>Parameter</h3>
-          <div class="fields">
-            {#each m.flags as v, i}
-              {#if raw || (t?.flags ? t.flags[i] !== "" : !t?.bits?.some((b) => b.flag === i + 1))}
-                <label class="fld"><span>{t?.flags?.[i] || `Flags ${i + 1}`}</span>
-                  <input class="num short" value={v} inputmode="numeric" onchange={(e) => change((b) => (b.flags[i] = byte(e)))} /></label>
-              {/if}
-            {/each}
-          </div>
-        </div>
+        {/each}
       {/if}
 
       <div class="foot">
-        <label class="check"><input type="checkbox" bind:checked={raw} /> alle Felder zeigen</label>
+        <label class="check"><input type="checkbox" bind:checked={raw} disabled={!t?.fields} /> Rohwerte zeigen (Ereignisse, Sets, Flags)</label>
         <code class="num">modc.{sel}={modcText(m)}</code>
       </div>
     </section>
@@ -182,7 +191,12 @@
   .bits { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
   .check { display: inline-flex; align-items: center; gap: .4rem; }
   .check input { accent-color: var(--accent); }
-  .fields { display: grid; gap: .5rem 1.25rem; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+  .fields { display: grid; gap: .6rem 1.25rem; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); align-items: end; }
+  .typed { border-top: 1px solid var(--line); padding-top: .8rem; }
+  .fld.wide { grid-column: 1 / -1; }
+  .unit { display: flex; align-items: baseline; gap: .4rem; }
+  .unit i { font-style: normal; color: var(--muted); }
+  .unit em { font-style: normal; color: var(--faint); font-size: .75rem; }
   .fld { display: grid; gap: .15rem; font-size: .8rem; color: var(--muted); }
   .fld input { font-size: .9rem; }
   .evt { display: flex; gap: .4rem; }

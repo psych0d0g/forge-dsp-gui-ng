@@ -208,7 +208,7 @@ FILE_v10 = "biquad.3.1.calc=[3,80,0,707,0,128]"
   });
 });
 
-import { availableTypes, emptyModc, eventOptions, modcName, modcText } from "../src/lib/device";
+import { availableTypes, emptyModc, eventOptions, modcName, modcText, modcType, wordGet, wordSet } from "../src/lib/device";
 
 describe("MODC blocks", () => {
   it("text as the firmware prints it, names, available types", async () => {
@@ -255,5 +255,28 @@ describe("signal sums (All Over)", () => {
     const off = sumsMapping(s, 1, false);
     expect(off).toHaveLength(8);
     expect(off.every(([, , v]) => v === 0)).toBe(true);
+  });
+});
+
+describe("MODC dialog fields", () => {
+  it("TCXO correction: signed tenths of a hertz over sets 1/2, as the original GUI stores it", () => {
+    const sets = [0, 0, 4, 0];
+    wordSet(sets, 1, -125);                       // -12.5 Hz
+    expect(sets).toEqual([0x83, 0xff, 4, 0]);
+    expect(wordGet(sets, 1, true)).toBe(-125);
+    expect(wordGet(sets, 1)).toBe(0xff83);
+    wordSet(sets, 1, 1000);
+    expect(wordGet(sets, 1, true)).toBe(1000);
+    const clock = modcType(68)!.fields!;
+    expect(clock[0]).toMatchObject({ kind: "word", signed: true, div: 10, unit: "Hz" });
+    expect(clock[1].kind === "choice" && clock[1].options.length).toBe(9);
+  });
+  it("shutdown delays in steps of 250 ms; every OEM dialog has fields", () => {
+    const f = modcType(193)!.fields!.filter((x) => x.kind === "byte");
+    expect(f.map((x) => [x.i, x.mul])).toEqual([[1, 0.25], [3, 0.25], [4, 0.25], [2, 0.05]]);
+    for (const t of [16, 17, 82, 86, 84, 108, 106, 109, 96, 97, 66, 193, 68, 51, 52, 50, 49]) expect(modcType(t)?.fields?.length, String(t)).toBeGreaterThan(0);
+    // indices stay inside the four events/sets/flags
+    for (const t of [16, 17, 82, 86, 84, 108, 106, 109, 96, 97, 66, 193, 68, 48, 49, 50, 51, 52])
+      for (const x of modcType(t)!.fields!) expect(x.i >= 1 && x.i + (x.kind === "word" ? 1 : 0) <= 4, `${t} ${x.label}`).toBe(true);
   });
 });
