@@ -313,10 +313,18 @@ export function delayGroups(s: DeviceState, l: Limits = limitsOf(s)): DelayGroup
   return groups;
 }
 
-/** largest value channel `ch` may take without exceeding the pool of its group */
-export function delayMax(s: DeviceState, group: DelayGroup, ch: number): number {
-  const others = group.channels.reduce((a, c) => a + (c === ch ? 0 : s.delay.out[c - 1] ?? 0), 0);
+/** largest value channel `ch` may take without exceeding the pool of its group; `list` = the
+ * delays the group counts in (outputs by default) */
+export function delayMax(s: DeviceState, group: DelayGroup, ch: number, list: number[] = s.delay.out): number {
+  const others = group.channels.reduce((a, c) => a + (c === ch ? 0 : list[c - 1] ?? 0), 0);
   return Math.max(0, group.budget - others);
+}
+
+/** Input delays: the analog inputs (as many as have a level, the firmware lists more) share the
+ * delay memory of DSP 1. Empty on models without input delay. */
+export function inputDelayGroup(s: DeviceState, l: Limits = limitsOf(s)): DelayGroup | null {
+  const n = Math.min(s.delay.in.length, s.gain.in.length);
+  return n ? { channels: Array.from({ length: n }, (_, i) => i + 1), budget: l.delayPool } : null;
 }
 
 export const SPEED_OF_SOUND = 343;  // m/s, as the firmware's cm factor (0.357 cm per sample at 96 kHz)

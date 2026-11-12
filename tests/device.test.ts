@@ -280,3 +280,18 @@ describe("MODC dialog fields", () => {
       for (const x of modcType(t)!.fields!) expect(x.i >= 1 && x.i + (x.kind === "word" ? 1 : 0) <= 4, `${t} ${x.label}`).toBe(true);
   });
 });
+
+import { inputDelayGroup } from "../src/lib/device";
+
+describe("input delays", () => {
+  it("the analog inputs share one pool; models without input delay have none", async () => {
+    const s = await readDevice(new ForgeClient(new Recorded(fixture("V40-96ELN")), 100, 10));
+    const g = inputDelayGroup(s)!;
+    expect(g.channels).toEqual([1, 2, 3, 4, 5, 6]);            // the firmware lists 8, 7/8 mirror output delays
+    s.delay.in = [100, 0, 0, 0, 0, 0, 0, 0];
+    expect(delayMax(s, g, 2, s.delay.in)).toBe(5840 - 100);
+    expect(delayMax(s, g, 1, s.delay.in)).toBe(5840);
+    const none = emptyState();
+    expect(inputDelayGroup(none)).toBeNull();
+  });
+});

@@ -14,7 +14,7 @@ export function demoState(): DeviceState {
   s.gain = { out: [211, 211, 215, 215, 223, 223, 199, 199], in: [223, 223, 223, 223, 223, 223], spdif: [255, 255] };
   s.mute = [0, 0, 0, 0, 0, 0, 1, 1];
   s.phase = [0, 0, 0, 1, 0, 0, 0, 0];
-  s.delay = { out: [0, 12, 48, 55, 96, 96, 0, 0], in: [0, 0, 0, 0, 0, 0, 0, 0] };
+  s.delay = { out: [0, 12, 48, 55, 96, 96, 0, 0], in: [0, 0, 24, 24, 0, 0, 0, 0] };
   s.mixer = { position: 1, input: 3, inputMax: 5, values: {} };
   for (let p = 1; p <= 4; p++) {
     const g: Record<number, Record<number, number>> = {};

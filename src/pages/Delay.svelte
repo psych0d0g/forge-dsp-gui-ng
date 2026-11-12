@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { app, outName, write } from "../lib/app.svelte";
-  import { alignFromDistances, cmToSamples, delayGroups, delayMax, msToSamples, samplesToCm, samplesToMs } from "../lib/device";
+  import { app, inName, outName, write } from "../lib/app.svelte";
+  import { alignFromDistances, cmToSamples, delayGroups, delayMax, inputDelayGroup, inputsLeftFirst, msToSamples, samplesToCm,
+    samplesToMs } from "../lib/device";
   import Slider from "../components/Slider.svelte";
 
   type Unit = "ms" | "cm" | "samples";
@@ -8,6 +9,19 @@
   const d = $derived(app.device);
   const rate = $derived(d.identity.sampleRate || 96000);
   const groups = $derived(delayGroups(d));
+  const inGroup = $derived(inputDelayGroup(d));
+  const inOrder = $derived(inGroup ? inputsLeftFirst(inGroup.channels.length) : []);  // left before right
+  function setIn(n: number, samples: number, max: number) {
+    const v = Math.max(0, Math.min(max, samples));
+    d.delay.in[n - 1] = v;
+    write(`delay.in.${n}`, v);
+  }
+  function typedIn(e: Event, n: number, max: number) {
+    const el = e.currentTarget as HTMLInputElement;
+    const v = parse(el.value);
+    if (v !== null) setIn(n, v, max);
+    el.value = show(d.delay.in[n - 1]);
+  }
   let dist = $state<Record<number, string>>({});
 
   const show = (n: number) => (unit === "ms" ? samplesToMs(n, rate).toFixed(2) : unit === "cm" ? samplesToCm(n, rate).toFixed(1) : String(n));
@@ -30,7 +44,7 @@
   const groupOf = (ch: number) => groups.find((g) => g.channels.includes(ch))!;
   // The pool allows 60 ms, a car needs a few: the slider covers 15 ms (or the largest value in
   // use), larger values can be typed.
-  const sliderMax = $derived(Math.min(5840, Math.max(msToSamples(15, rate), ...d.delay.out)));
+  const sliderMax = $derived(Math.min(5840, Math.max(msToSamples(15, rate), ...d.delay.out, ...(inGroup ? d.delay.in.slice(0, inGroup.channels.length) : []))));
   const used = (chs: number[]) => chs.reduce((a, c) => a + (d.delay.out[c - 1] ?? 0), 0);
 
   // time alignment from distances
@@ -50,7 +64,8 @@
 <header class="head">
   <div>
     <h2>Laufzeit</h2>
-    <p class="muted">Verzögerung je Ausgang, damit der Schall aller Lautsprecher gleichzeitig am Hörplatz ankommt.</p>
+    <p class="muted">Verzögerung je Eingang und je Ausgang. An den Ausgängen gleicht sie die Wege der Lautsprecher zum Hörplatz aus, an
+      den Eingängen den Versatz zwischen Quellen.</p>
   </div>
   <div class="units" role="group" aria-label="Einheit">
     {#each [["ms", "ms"], ["cm", "cm"], ["samples", "Samples"]] as [u, t]}
@@ -59,6 +74,28 @@
   </div>
 </header>
 
+{#if inGroup}
+  <h3 class="sect">Eingänge</h3>
+  <div class="cols">
+    <section class="panel box two">
+      <div class="boxhead">
+        <h3>Analog</h3>
+        <span class="muted num small" title="Die Eingänge teilen sich einen Vorrat an Verzögerung">
+          {show(inGroup.channels.reduce((a, c) => a + (d.delay.in[c - 1] ?? 0), 0))} von {show(inGroup.budget)} {unit === "samples" ? "" : unit} belegt</span>
+      </div>
+      {#each inOrder as n}
+        {@const max = delayMax(d, inGroup, n, d.delay.in)}
+        <div class="row">
+          <span class="name wide">{inName(n)}</span>
+          <Slider value={d.delay.in[n - 1] ?? 0} max={sliderMax} label="Laufzeit {inName(n)}" onchange={(v) => setIn(n, v, max)} />
+          <label class="readout num"><input value={show(d.delay.in[n - 1] ?? 0)} onchange={(e) => typedIn(e, n, max)}
+            aria-label="Laufzeit {inName(n)} in {unit}" /><span>{unit === "samples" ? "S" : unit}</span></label>
+        </div>
+      {/each}
+    </section>
+  </div>
+  <h3 class="sect">Ausgänge</h3>
+{/if}
 <div class="cols">
   {#each groups as g}
     <section class="panel box">
@@ -83,7 +120,7 @@
 </div>
 
 <section class="panel box align">
-  <div class="boxhead"><h3>Aus Abständen berechnen</h3></div>
+  <div class="boxhead"><h3>Ausgänge aus Abständen berechnen</h3></div>
   <p class="muted">Abstand vom Hörplatz zu jedem Lautsprecher in cm eintragen. Der entfernteste bekommt keine Verzögerung,
     alle anderen so viel, wie ihr Schall zu früh ankäme (Schallgeschwindigkeit 343 m/s).</p>
   <div class="dists">
@@ -106,6 +143,12 @@
   .units button.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); }
   .cols { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); }
   .box { padding: .85rem 1rem; display: grid; gap: .35rem; align-content: start; }
+  .box.two { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; }
+  .box.two .boxhead { grid-column: 1 / -1; }
+  .sect { margin: .9rem 0 .45rem; }
+  .sect:first-of-type { margin-top: 0; }
+  .name.wide { width: 6.5rem; }
+  @media (max-width: 60rem) { .box.two { grid-template-columns: minmax(0, 1fr); } }
   .boxhead { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
   .small { font-size: .78rem; }
   .row { display: flex; align-items: center; gap: .65rem; min-width: 0; }
