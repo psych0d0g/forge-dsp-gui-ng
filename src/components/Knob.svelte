@@ -1,8 +1,11 @@
 <script lang="ts">
   // Rotary control: drag up/down, wheel or arrow keys while focused, value editable below.
-  let { value, min = 0, max = 100, step = 1, label, caption = "", unit = "", size = 56, disabled = false, onchange }:
+  let { value, min = 0, max = 100, step = 1, label, caption = "", unit = "", size = 56, disabled = false, display, parse, onchange }:
     { value: number; min?: number; max?: number; step?: number; label: string; caption?: string; unit?: string;
-      size?: number; disabled?: boolean; onchange: (v: number) => void } = $props();
+      size?: number; disabled?: boolean;
+      /** text of the value field and its way back, for scales that are not the knob's own (log frequency) */
+      display?: (v: number) => string; parse?: (text: string) => number | null;
+      onchange: (v: number) => void } = $props();
 
   const START = -135, SWEEP = 270, R = 20;
   const frac = $derived(max > min ? (Math.min(max, Math.max(min, value)) - min) / (max - min) : 0);
@@ -17,6 +20,7 @@
   const angle = $derived(START + SWEEP * frac);
   const tip = $derived(polar(angle, 13));
 
+  const shown = $derived(display ? display(value) : String(value));
   const clamp = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step));
   const emit = (v: number) => { const c = clamp(v); if (!disabled && c !== value) onchange(c); };
 
@@ -41,9 +45,9 @@
   }
   function typed(e: Event) {
     const el = e.currentTarget as HTMLInputElement;
-    const v = Number(el.value.replace(",", "."));
-    if (!Number.isNaN(v)) emit(v);
-    el.value = String(value);
+    const v = parse ? parse(el.value) : Number(el.value.replace(",", "."));
+    if (v !== null && !Number.isNaN(v)) emit(v);
+    el.value = shown;
   }
 </script>
 
@@ -57,7 +61,7 @@
     <circle class="cap-c" cx="28" cy="28" r="14" />
     <line class="tick" x1="28" y1="28" x2={tip[0]} y2={tip[1]} />
   </svg>
-  <label class="val num"><input value={String(value)} inputmode="numeric" aria-label="{label}, Wert" {disabled} onchange={typed} />{#if unit}<span>{unit}</span>{/if}</label>
+  <label class="val num"><input value={shown} inputmode="decimal" aria-label="{label}, Wert" {disabled} onchange={typed} />{#if unit}<span>{unit}</span>{/if}</label>
 </div>
 
 <style>
@@ -74,7 +78,7 @@
   .tick { stroke: var(--fg); stroke-width: 2; stroke-linecap: round; }
   .zero .tick { stroke: var(--faint); }
   .val { display: flex; align-items: baseline; gap: .15rem; font-size: .75rem; color: var(--muted); }
-  .knob .val input { width: 2.6rem; text-align: center; border: 1px solid transparent; background: none; padding: .1rem .15rem; border-radius: 6px;
+  .knob .val input { width: 100%; min-width: 2.6rem; text-align: center; border: 1px solid transparent; background: none; padding: .1rem .15rem; border-radius: 6px;
     font: inherit; font-size: .9rem; color: var(--fg); }
   .zero .val input:not(:focus) { color: var(--faint); }
   .val input:hover { border-color: var(--line-strong); }

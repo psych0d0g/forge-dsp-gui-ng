@@ -6,6 +6,7 @@
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
+  import Knob from "../components/Knob.svelte";
 
   const d = $derived(app.device);
   const lim = $derived(limitsOf(d));
@@ -21,8 +22,21 @@
     if (!channels.includes(ch)) ch = channels.find((c) => c < 30) ?? channels[0] ?? 0;
   });
   const slots = $derived(Object.entries(d.biquads[ch] ?? {}).map(([n, bq]) => ({ n: Number(n), bq })).sort((a, b) => a.n - b.n));
-  // Filters line up by frequency. The order is only taken over when an interaction ends (pointer
-  // released, field left, filter added or removed), so nothing moves away under the hand.
+  let selected = $state<number | null>(null);
+  let showPhase = $state(false);
+  let linked = $state(false);
+  const partner = (c: number) => (c > 30 ? (c === 35 ? 36 : 35) : c % 2 ? c + 1 : c - 1);
+
+  // Two kinds of biquads: EQ bands (peaking, by Q or by bandwidth) below the curve, and filters
+  // (crossovers, shelves, notch, all passes …) with knobs above it.
+  const EQ_Q = 1, EQ_BW = 18;
+  const isBand = (bq: Biquad) => bq.type === EQ_Q || bq.type === EQ_BW;
+  const FILTER_TYPES = TYPES.filter((t) => t.type !== 0 && t.type !== EQ_Q && t.type !== EQ_BW);
+  const GROUP_LABEL: Record<string, string> = { EQ: "Shelf, Notch, Bandpass" };
+  const filterGroups = [...new Set(FILTER_TYPES.map((t) => t.group))];
+
+  // Both lists line up by frequency. The order is only taken over when an interaction ends
+  // (pointer released, field left, added, removed), so nothing moves away under the hand.
   let order = $state<number[]>([]);
   const byFreq = () => slots.filter((s) => s.bq.type !== 0).sort((a, b) => a.bq.f - b.bq.f || a.n - b.n).map((s) => s.n);
   async function resort() {
@@ -41,18 +55,19 @@
     ...order.map((n) => slots.find((s) => s.n === n)).filter((s): s is { n: number; bq: Biquad } => !!s && s.bq.type !== 0),
     ...slots.filter((s) => s.bq.type !== 0 && !order.includes(s.n)),  // just added, not sorted in yet
   ]);
-  /** running number of a filter in this order (the slot number of the device is an internal detail) */
-  const pos = (n: number) => used.findIndex((s) => s.n === n) + 1;
-  let selected = $state<number | null>(null);
-  let showPhase = $state(false);
-  let linked = $state(false);
-  const partner = (c: number) => (c > 30 ? (c === 35 ? 36 : 35) : c % 2 ? c + 1 : c - 1);
-  const groups = [...new Set(TYPES.map((t) => t.group))].filter((g) => g !== "Aus");
+  const bands = $derived(used.filter((s) => isBand(s.bq)));
+  const filters = $derived(used.filter((s) => !isBand(s.bq)));
+  /** label in lists and on the curve: bands 1, 2, 3 …, filters A, B, C … */
+  const tag = (n: number) => {
+    const b = bands.findIndex((s) => s.n === n);
+    return b >= 0 ? String(b + 1) : String.fromCharCode(65 + Math.max(0, filters.findIndex((s) => s.n === n)));
+  };
+  const free = $derived(slots.length - used.length);
 
   function send(c: number, n: number, bq: Biquad) {
     write(`biquad.${c}.${n}.calc`, [bq.type, bq.f, bq.gain, bq.q, bq.b, bq.flags]);
   }
-  /** change a filter of this channel (and of its partner when linked) */
+  /** change a biquad of this channel (and of its partner when linked) */
   function update(n: number, patch: Partial<Biquad>) {
     for (const c of linked && d.biquads[partner(ch)]?.[n] ? [ch, partner(ch)] : [ch]) {
       const bq = { ...d.biquads[c][n], ...patch };
@@ -71,11 +86,12 @@
     if (!t?.gain) patch.gain = 0;
     update(n, patch);
   }
-  function add() {
-    const free = slots.find((s) => s.bq.type === 0);
-    if (!free) return;
-    update(free.n, { type: 1, f: 1000, gain: 0, q: 1414, b: 0, flags: 128 });
-    selected = free.n;
+  function add(kind: "band" | "filter") {
+    const slot = slots.find((s) => s.bq.type === 0);
+    if (!slot) return;
+    update(slot.n, kind === "band" ? { type: EQ_Q, f: 1000, gain: 0, q: 1414, b: 707, flags: 128 }
+      : { type: 9, f: 80, gain: 0, q: 707, b: 0, flags: 128 });  // Butterworth high pass
+    selected = slot.n;
     resort();
   }
   function remove(n: number) {
@@ -83,23 +99,20 @@
     if (selected === n) selected = null;
     resort();
   }
-  // The upright fader of a strip sets the gain; for types without gain (crossovers, all passes)
-  // it sets the frequency on a logarithmic scale.
-  const logFrac = (f: number) => (Math.log(clamp(f || lim.freq[0], lim.freq)) - Math.log(lim.freq[0])) / (Math.log(lim.freq[1]) - Math.log(lim.freq[0]));
-  const faderFrac = (bq: Biquad) => (typeInfo(bq.type)?.gain ? (bq.gain - lim.bqGain[0]) / (lim.bqGain[1] - lim.bqGain[0]) : logFrac(bq.f));
-  function faderSet(n: number, bq: Biquad, frac: number) {
-    if (typeInfo(bq.type)?.gain) update(n, { gain: Math.round(lim.bqGain[0] + frac * (lim.bqGain[1] - lim.bqGain[0])) });
-    else update(n, { f: Math.round(lim.freq[0] * Math.pow(lim.freq[1] / lim.freq[0], frac)) });
+  /** an EQ band by Q or by bandwidth: the same filter, the other parameter (Q = f / bandwidth) */
+  function bandMode(n: number, bq: Biquad, byBandwidth: boolean) {
+    if (byBandwidth === (bq.type === EQ_BW)) return;
+    if (byBandwidth) update(n, { type: EQ_BW, b: clamp(Math.round(bq.f / Math.max(bq.q / 1000, 0.001)), [1, lim.bqB[1]]) });
+    else update(n, { type: EQ_Q, q: clamp(Math.round((bq.f / Math.max(bq.b, 1)) * 1000), lim.bqQ) });
   }
-  function faderStep(n: number, bq: Biquad, dir: number) {
-    if (typeInfo(bq.type)?.gain) update(n, { gain: clamp(bq.gain + dir * 5, lim.bqGain) });        // 0.5 dB
-    else update(n, { f: clamp(Math.round(bq.f * Math.pow(2, dir / 12)) || bq.f + dir, lim.freq) });   // 1/12 octave
+  function num(e: Event, n: number, key: "f" | "gain" | "q" | "b", scale: number, range: [number, number]) {
+    const el = e.currentTarget as HTMLInputElement;
+    const v = Number(el.value.replace(",", "."));
+    if (!Number.isNaN(v)) update(n, { [key]: clamp(Math.round(v * scale), range) });
+    el.value = String(d.biquads[ch][n][key] / scale);
+    resort();
   }
-  const fmtF = (f: number) => (f >= 1000 ? `${+(f / 1000).toFixed(2)} kHz` : `${f} Hz`);
-  const fmtG = (g: number) => `${g > 0 ? "+" : g < 0 ? "−" : ""}${Math.abs(g / 10).toFixed(1)} dB`;
-
-  // Tab in a value field goes to the same field of the next filter (Shift+Tab: previous), so a
-  // row of frequencies or gains can be typed in one go. At the ends Tab leaves as usual.
+  // Tab in a value field of a band goes to the same field of the next band (Shift+Tab: previous)
   function tabAcross(e: KeyboardEvent) {
     if (e.key !== "Tab") return;
     const el = e.currentTarget as HTMLInputElement;
@@ -111,13 +124,17 @@
     next.select();
   }
 
-  function num(e: Event, n: number, key: "f" | "gain" | "q" | "b", scale: number, range: [number, number]) {
-    const el = e.currentTarget as HTMLInputElement;
-    const v = Number(el.value.replace(",", "."));
-    if (!Number.isNaN(v)) update(n, { [key]: clamp(Math.round(v * scale), range) });
-    el.value = String(d.biquads[ch][n][key] / scale);
-    resort();
-  }
+  // knobs on a logarithmic scale: position 0..STEPS, the value field shows the real unit
+  const STEPS = 600;
+  const toPos = (v: number, [lo, hi]: [number, number]) => Math.round((Math.log(clamp(v || lo, [lo, hi]) / lo) / Math.log(hi / lo)) * STEPS);
+  const fromPos = (p: number, [lo, hi]: [number, number]) => lo * Math.pow(hi / lo, p / STEPS);
+  const qRange = $derived<[number, number]>([Math.max(100, lim.bqQ[0]), lim.bqQ[1]]);   // 0.1 … 10
+  const bwRange = $derived<[number, number]>([Math.max(1, lim.bqB[0]), lim.bqB[1]]);
+  const parseNum = (t: string) => { const v = Number(t.replace(",", ".").replace("−", "-")); return Number.isNaN(v) ? null : v; };
+  const fmtHz = (f: number) => String(Math.round(f));
+
+  const gainFrac = (g: number) => (g - lim.bqGain[0]) / (lim.bqGain[1] - lim.bqGain[0]);
+  const fmtG = (g: number) => `${g > 0 ? "+" : g < 0 ? "−" : ""}${Math.abs(g / 10).toFixed(1)} dB`;
 </script>
 
 <svelte:window onpointerup={resort} />
@@ -125,8 +142,8 @@
 <header class="head">
   <div>
     <h2>Filter & EQ</h2>
-    <p class="muted">Weichen, Equalizer und Phasenfilter je Kanal. Punkte im Diagramm ziehen ändert Frequenz und Pegel, das
-      Mausrad auf einem Punkt die Güte. In den Wertefeldern springt Tab zum gleichen Feld des nächsten Filters.</p>
+    <p class="muted">Oben die Filter des Kanals (Weichen, Shelf, Phase), unten die EQ-Bänder. Punkte in der Kurve lassen sich ziehen,
+      das Mausrad auf einem Punkt ändert die Güte.</p>
   </div>
 </header>
 
@@ -139,6 +156,61 @@
   {/each}
 </div>
 
+<!-- filters: crossovers, shelves, notch, all passes -->
+<section class="panel block">
+  <div class="blockhead"><h3>Filter <span class="muted num">{filters.length}</span></h3></div>
+  <div class="cards">
+    {#each filters as { n, bq } (n)}
+      {@const t = typeInfo(bq.type)}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="card" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
+        <div class="cardhead">
+          <span class="nr">{tag(n)}</span>
+          <select value={bq.type} aria-label="Typ Filter {tag(n)}" title={t?.name ?? ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
+            {#if !t}<option value={bq.type}>Typ {bq.type}</option>{/if}
+            {#each filterGroups as g}
+              <optgroup label={GROUP_LABEL[g] ?? g}>
+                {#each FILTER_TYPES.filter((x) => x.group === g) as x}
+                  <option value={x.type} disabled={x.port && !port}>{x.name}{x.port && !port ? " (nur Port-Firmware)" : ""}</option>
+                {/each}
+              </optgroup>
+            {/each}
+          </select>
+          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Filter ein/aus"
+            onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
+          <button class="ghost del" title="Filter entfernen" aria-label="Filter {tag(n)} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
+        </div>
+        <div class="knobs">
+          {#if bq.type !== 19}
+            <Knob size={46} caption="Frequenz" unit="Hz" label="Frequenz Filter {tag(n)}" min={0} max={STEPS} value={toPos(bq.f, lim.freq)}
+              display={() => fmtHz(bq.f)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : toPos(v, lim.freq); }}
+              onchange={(p) => update(n, { f: Math.round(fromPos(p, lim.freq)) })} />
+          {/if}
+          {#if t?.gain}
+            <Knob size={46} caption="Pegel" unit="dB" label="Pegel Filter {tag(n)}" min={lim.bqGain[0]} max={lim.bqGain[1]} value={bq.gain}
+              display={(v) => (v / 10).toFixed(1)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : Math.round(v * 10); }}
+              onchange={(v) => update(n, { gain: v })} />
+          {/if}
+          {#if t?.q}
+            <Knob size={46} caption="Güte" unit="Q" label="Güte Filter {tag(n)}" min={0} max={STEPS} value={toPos(bq.q, qRange)}
+              display={() => String(bq.q / 1000)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : toPos(v * 1000, qRange); }}
+              onchange={(p) => update(n, { q: Math.round(fromPos(p, qRange)) })} />
+          {/if}
+          {#if t?.b === "Winkel (°)"}
+            <Knob size={46} caption="Winkel" unit="°" label="Winkel Filter {tag(n)}" min={1} max={359} value={clamp(bq.b, [1, 359])}
+              onchange={(v) => update(n, { b: v })} />
+          {:else if t?.b}
+            <Knob size={46} caption="Bandbreite" unit="Hz" label="Bandbreite Filter {tag(n)}" min={0} max={STEPS} value={toPos(bq.b, bwRange)}
+              display={() => fmtHz(bq.b)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : toPos(v, bwRange); }}
+              onchange={(p) => update(n, { b: Math.round(fromPos(p, bwRange)) })} />
+          {/if}
+        </div>
+      </div>
+    {/each}
+    <button class="add" onclick={() => add("filter")} disabled={!free} title="Filter hinzufügen"><span class="plus">+</span><span>Filter</span></button>
+  </div>
+</section>
+
 <section class="panel plot">
   <div class="plothead">
     <h3>{chName(ch)}</h3>
@@ -148,57 +220,52 @@
         <input type="checkbox" bind:checked={linked} /> mit {chName(partner(ch))} koppeln</label>
     {/if}
   </div>
-  <ResponsePlot filters={used.map((s, i) => ({ ...s, label: i + 1 }))} {rate} freq={lim.freq} gainRange={lim.bqGain} {selected} {showPhase}
+  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} gainRange={lim.bqGain} {selected} {showPhase}
     onselect={(n) => (selected = n)}
     onmove={(n, f, g) => update(n, g === null ? { f } : { f, gain: g })}
     onq={(n, k) => update(n, { q: clamp(Math.round(d.biquads[ch][n].q * k), lim.bqQ) })} />
 </section>
 
-<section class="panel list">
-  <div class="listhead">
-    <h3>Filter <span class="muted num">{used.length} von {slots.length}</span></h3>
-  </div>
+<!-- EQ bands -->
+<section class="panel block">
+  <div class="blockhead"><h3>EQ-Bänder <span class="muted num">{bands.length}</span></h3>
+    <span class="muted small">{free} von {slots.length} Plätzen dieses Kanals frei</span></div>
   <div class="strips">
-    {#each used as { n, bq } (n)}
-      {@const t = typeInfo(bq.type)}
+    {#each bands as { n, bq } (n)}
+      {@const bw = bq.type === EQ_BW}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="strip" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
         <div class="striphead">
-          <span class="nr num">{pos(n)}</span>
-          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Filter ein/aus"
+          <span class="nr">{tag(n)}</span>
+          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Band ein/aus"
             onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
-          <button class="ghost del" title="Filter entfernen" aria-label="Filter {n} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
+          <button class="ghost del" title="Band entfernen" aria-label="Band {tag(n)} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
         </div>
-        <select value={bq.type} aria-label="Typ Filter {pos(n)}" title={t?.name ?? ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
-          {#if !t}<option value={bq.type}>Typ {bq.type}</option>{/if}
-          {#each groups as g}
-            <optgroup label={g}>
-              {#each TYPES.filter((x) => x.group === g) as x}
-                <option value={x.type} disabled={x.port && !port}>{x.name}{x.port && !port ? " (nur Port-Firmware)" : ""}</option>
-              {/each}
-            </optgroup>
-          {/each}
-        </select>
         <div class="fader">
-          <VFader frac={faderFrac(bq)} zero={t?.gain ? -lim.bqGain[0] / (lim.bqGain[1] - lim.bqGain[0]) : null}
-            label="{t?.gain ? 'Pegel' : 'Frequenz'} Filter {n}" valuetext={t?.gain ? fmtG(bq.gain) : fmtF(bq.f)}
-            onfrac={(f) => faderSet(n, bq, f)} onstep={(dir) => faderStep(n, bq, dir)} />
-          <span class="what">{t?.gain ? "Pegel" : "Frequenz"}</span>
+          <VFader frac={gainFrac(bq.gain)} zero={gainFrac(0)} label="Pegel Band {tag(n)}" valuetext={fmtG(bq.gain)}
+            onfrac={(f) => update(n, { gain: Math.round(lim.bqGain[0] + f * (lim.bqGain[1] - lim.bqGain[0])) })}
+            onstep={(dir) => update(n, { gain: clamp(bq.gain + dir * 5, lim.bqGain) })} />
         </div>
+        <label class="f"><span>Pegel</span><span class="in"><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
+          onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /><i>dB</i></span></label>
         <label class="f"><span>Frequenz</span><span class="in"><input class="num" data-k="f" onkeydown={tabAcross} value={bq.f} inputmode="numeric"
           onchange={(e) => num(e, n, "f", 1, lim.freq)} /><i>Hz</i></span></label>
-        <label class="f" class:hidden={!t?.gain}><span>Pegel</span><span class="in"><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
-          disabled={!t?.gain} onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /><i>dB</i></span></label>
-        <label class="f" class:hidden={!t?.q}><span>Güte</span><span class="in"><input class="num" data-k="q" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal"
-          disabled={!t?.q} onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} /><i>Q</i></span></label>
-        <label class="f" class:hidden={!t?.b}><span>{t?.b === "Winkel (°)" ? "Winkel" : "Bandbreite"}</span><span class="in"><input class="num" data-k="b" onkeydown={tabAcross}
-          value={bq.b} inputmode="numeric" disabled={!t?.b}
-          onchange={(e) => num(e, n, "b", 1, t?.b === "Winkel (°)" ? [1, 359] : lim.bqB)} /><i>{t?.b === "Winkel (°)" ? "°" : "Hz"}</i></span></label>
+        <div class="f">
+          <span class="mode" role="group" aria-label="Breite des Bands angeben als">
+            <button class:on={!bw} aria-pressed={!bw} onclick={() => bandMode(n, bq, false)}>Güte</button>
+            <button class:on={bw} aria-pressed={bw} onclick={() => bandMode(n, bq, true)}>Bandbreite</button>
+          </span>
+          {#if bw}
+            <span class="in"><input class="num" data-k="w" onkeydown={tabAcross} value={bq.b} inputmode="numeric" aria-label="Bandbreite Band {tag(n)}"
+              onchange={(e) => num(e, n, "b", 1, [1, lim.bqB[1]])} /><i>Hz</i></span>
+          {:else}
+            <span class="in"><input class="num" data-k="w" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal" aria-label="Güte Band {tag(n)}"
+              onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} /><i>Q</i></span>
+          {/if}
+        </div>
       </div>
     {/each}
-    <button class="add" onclick={add} disabled={used.length >= slots.length} title="Filter hinzufügen">
-      <span class="plus">+</span><span>Filter</span>
-    </button>
+    <button class="add" onclick={() => add("band")} disabled={!free} title="EQ-Band hinzufügen"><span class="plus">+</span><span>Band</span></button>
   </div>
 </section>
 
@@ -209,32 +276,40 @@
   .chans button.on { background: color-mix(in srgb, var(--accent) 20%, transparent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--fg); }
   .chans .n { color: var(--faint); }
   .chans .bus { border-style: dashed; }
-  .plot { padding: .8rem 1rem .4rem; }
+  .block { padding: .8rem 1rem; display: grid; gap: .5rem; min-width: 0; flex: none; }
+  .blockhead { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .small { font-size: .78rem; }
+  .plot { padding: .8rem 1rem .4rem; margin: .75rem 0; flex: none; }
   .plothead { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin-bottom: .3rem; }
   .plothead h3 { margin-right: auto; }
   .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; }
   .check input { accent-color: var(--accent); }
-  .list { margin-top: .75rem; padding: .8rem 1rem; display: grid; gap: .5rem; min-width: 0; }
-  .listhead { display: flex; justify-content: space-between; align-items: center; }
-  /* upright filter strips side by side, scrolling sideways when there are many */
-  .strips { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .5rem; align-items: stretch; }
-  .strip { flex: none; width: 8.8rem; display: flex; flex-direction: column; gap: .45rem; padding: .5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
-  .strip.sel { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--raised)); }
-  .strip.off > :not(.striphead) { opacity: .5; }
-  .striphead { display: flex; align-items: center; gap: .3rem; }
-  .nr { width: 1.4rem; color: var(--muted); font-weight: 650; }
+
+  .cards, .strips { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .4rem; align-items: stretch; }
+  .card, .strip { flex: none; display: flex; flex-direction: column; gap: .45rem; padding: .5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+  .card.sel, .strip.sel { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--raised)); }
+  .card.off .knobs, .strip.off > :not(.striphead) { opacity: .5; }
+  .cardhead, .striphead { display: flex; align-items: center; gap: .35rem; }
+  .nr { min-width: 1.4rem; height: 1.4rem; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--accent); font-size: .75rem; font-weight: 650; }
   .sw { padding: .15rem .5rem; font-size: .75rem; color: var(--muted); }
   .sw.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--accent); }
   .del { margin-left: auto; color: var(--muted); padding: .2rem; display: grid; }
-  select { width: 100%; padding: .3rem .35rem; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel); font-size: .8rem; text-overflow: ellipsis; }
+  select { padding: .3rem .35rem; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel); font-size: .82rem; text-overflow: ellipsis; width: 12.5rem; }
   select option, select optgroup { background: var(--bg); }
-  .fader { display: grid; justify-items: center; gap: .1rem; }
-  .what { font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
-  .f { display: grid; gap: .05rem; font-size: .68rem; color: var(--muted); }
-  .f.hidden { visibility: hidden; }
+  .knobs { display: flex; gap: .2rem; justify-content: flex-start; min-height: 5.9rem; }
+  .knobs :global(.knob) { width: 5rem !important; }
+  .knobs :global(.knob .val input) { max-width: 3.6rem; }
+  .card .del { margin-left: 0; }
+
+  .strip { width: 8.8rem; }
+  .fader { display: grid; justify-items: center; }
+  .f { display: grid; gap: .1rem; font-size: .68rem; color: var(--muted); }
   .in { display: flex; align-items: baseline; gap: .25rem; }
   .in input { width: 100%; min-width: 0; text-align: right; font-size: .88rem; padding: .25rem .4rem; }
   .in i { font-style: normal; font-size: .72rem; width: 1.1rem; flex: none; }
-  .add { flex: none; width: 4.6rem; display: grid; place-content: center; justify-items: center; gap: .2rem; border-style: dashed; color: var(--muted); }
+  .mode { display: flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; margin-bottom: .15rem; }
+  .mode button { flex: 1; border: 0; border-radius: 0; background: none; padding: .15rem .2rem; font-size: .7rem; color: var(--muted); }
+  .mode button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
+  .add { flex: none; width: 4.6rem; min-height: 5rem; display: grid; place-content: center; justify-items: center; gap: .2rem; border-style: dashed; color: var(--muted); }
   .plus { font-size: 1.4rem; line-height: 1; }
 </style>

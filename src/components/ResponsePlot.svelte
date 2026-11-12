@@ -5,7 +5,7 @@
   import { chainResponse, coeffs, isActive, logFreqs, typeInfo } from "../lib/dsp/biquad";
 
   let { filters, rate, freq, gainRange, selected, showPhase, onselect, onmove, onq }: {
-    filters: { n: number; bq: Biquad; label?: number }[]; rate: number; freq: [number, number]; gainRange: [number, number];
+    filters: { n: number; bq: Biquad; label?: string | number }[]; rate: number; freq: [number, number]; gainRange: [number, number];
     selected: number | null; showPhase: boolean; onselect: (n: number) => void;
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
   } = $props();
