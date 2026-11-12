@@ -1,5 +1,5 @@
 // Application state (Svelte 5 runes): connection, device model, log, navigation.
-import { ForgeClient, type Value } from "./protocol";
+import { ForgeClient, type Answer, type Value } from "./protocol";
 import type { Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
 import { openWebSocket } from "./transport/websocket";
@@ -78,6 +78,30 @@ export async function reload() {
   app.device = await readDevice(client, (p) => (app.progress = p));
   app.progress = null;
   app.status = "online";
+}
+
+/** one read for a page (diagnostics); answers also go into the model */
+export async function query(reg: string): Promise<Answer[]> {
+  if (!client) return [];
+  try {
+    const r = await client.get(reg);
+    for (const a of r) applyAnswer(app.device, a);
+    return r;
+  } catch {
+    return [];
+  }
+}
+
+/** one write that is not a model value (diagnostics); returns the error text or "" */
+export async function writeOnce(reg: string, value: Value): Promise<string> {
+  if (!client) return "nicht verbunden";
+  try {
+    const r = await client.set(reg, value, { checksum: true });
+    const bad = r.find((a) => a.kind === "error");
+    return bad ? bad.message ?? "Fehler" : "";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 /** raw console line */

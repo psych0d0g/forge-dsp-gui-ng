@@ -28,7 +28,10 @@ export function parseAnswer(line: string): Answer | null {
   if (!m) return null;
   const kind = KIND[m[1]];
   const a: Answer = { kind, device: Number(m[2]), register: m[3], raw };
-  if (m[4] !== undefined) a.value = parseValue(m[4]);
+  if (m[4] !== undefined) {
+    // values that are not in the list syntax (i2c answers such as "&HE4,&B11100100") stay text
+    try { a.value = parseValue(m[4]); } catch { a.value = m[4].trim(); }
+  }
   if (m[5] !== undefined) a.message = m[5];
   return a;
 }

@@ -137,3 +137,36 @@ describe("delay units and alignment", () => {
     expect(alignFromDistances([100, 134.3, null, 0], 96000)).toEqual([96, 0, 0, 0]);
   });
 });
+
+import { chipAt, ct7302Locked, errorName, es9018Locked, hardwareCheck, isEeprom, parseDspBoot, parseRegister, parseScan } from "../src/lib/device";
+
+describe("diagnostics", () => {
+  it("i2c answers that are not lists stay text", () => {
+    const a = parseAnswer(" <.1 i2c.1.32.122=&HE4,&B11100100")!;
+    expect(a.value).toBe("&HE4,&B11100100");
+    expect(parseRegister(a.value)).toBe(0xe4);
+    expect(parseScan(parseAnswer(" <.1 i2c.1.scan=[&H20,&H22,&H40,&H4E,&H68,&HA0,&HA8,&HE0]")!.value))
+      .toEqual([0x20, 0x22, 0x40, 0x4e, 0x68, 0xa0, 0xa8, 0xe0]);
+    expect(parseAnswer(" <.1 i2c.1.state=1, 1, &H01, &B00000001")!.value).toBe("1, 1, &H01, &B00000001");
+  });
+  it("chips, lock bits, error names", () => {
+    expect(chipAt(2, 0x90)?.name).toBe("ES9018");
+    expect(chipAt(1, 0x90)).toBeUndefined();
+    expect(isEeprom(0xa8)).toBe(true);
+    expect(ct7302Locked(0xe4)).toBe(false);    // measured without a signal
+    expect(ct7302Locked(0x04)).toBe(true);
+    expect(es9018Locked(0x01)).toBe(true);
+    expect(errorName(3)).toBe("DSP 2: Kern antwortet nicht");        // tas3108_2_rdy (bit 2) + 1
+    expect(errorName(5)).toBe("DSP 3: Kern antwortet nicht");
+    expect(errorName(2)).toBe("DSP 1: Programmspeicher antwortet nicht");
+    expect(errorName(129)).toMatch(/Schnittstelle/);
+  });
+  it("DSP start and hardware check", () => {
+    const b = parseDspBoot([0, 52648, 900, 0, 0, 2, 41236, 1750, 0, 0, 0])!;
+    expect(b.buses[1]).toEqual({ bus: 2, startMs: 2, edges: 41236, quietMs: 1750, timeout: false, retries: 0 });
+    expect(b.restarted).toBe(false);
+    expect(parseDspBoot([0, 52646, 900, 0, 0, 41244, 1750, 0])!.buses[1].quietMs).toBe(1750);   // before 2.0.0
+    expect(hardwareCheck([110, 96, 63, 63, 2173, 2173])!.ok).toBe(true);
+    expect(hardwareCheck([110, 96, 63, 43, 2173, 2173])!.ok).toBe(false);
+  });
+});

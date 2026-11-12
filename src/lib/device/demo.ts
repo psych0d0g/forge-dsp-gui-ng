@@ -39,7 +39,7 @@ export function demoState(): DeviceState {
   for (const ch of [7, 8]) { s.biquads[ch][1] = on(13, 28, 0, 900); s.biquads[ch][2] = on(3, 70); s.biquads[ch][3] = on(3, 70); s.biquads[ch][4] = on(1, 45, 30, 2500); s.biquads[ch][5] = on(22, 70, 0, 707, 60); }
   s.preset = { loaded: 1, select: 255 };
   s.clickless = 1;
-  s.supply = [1, 13800];
+  s.supply = [3320, 13800];
   s.temperature = 38.5;
   s.vu = [0, 0, 0, 0, 0, 0, 215, 213];
   return s;
@@ -58,6 +58,15 @@ export class DemoTransport implements Transport {
       const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));
       out = ` <.1 system.vu=[0,0,0,0,0,0,${l},${l - 3 + Math.round(3 * Math.sin(t * 5))}]`;
     } else if (m[1] === "get" && m[3] === "system.temperature.celsius") out = " <.1 system.temperature.celsius=38.50";
+    else if (m[1] === "get") {
+      const fixed: Record<string, string> = {
+        "system.feature.attributes.hw": "[110,96,63,63,2173,2173]", "system.errors": "[[129,1],[3,2]]", "system.supply": "[3320,13800]",
+        "i2c.1.scan": "[&H20,&H22,&H40,&H4E,&H68,&HA0,&HA8,&HE0]", "i2c.2.scan": "[&H68,&H6A,&H90,&HA0,&HA2]",
+        "i2c.1.32.122": "&H04,&B00000100", "i2c.2.144.27": "&H01,&B00000001",
+        "system.hardware.dsp": "[0,52648,900,0,0,0,41247,1750,0,0,0]",
+      };
+      if (fixed[m[3]]) out = ` <.1 ${m[3]}=${fixed[m[3]]}`;
+    }
     setTimeout(() => this.fn(out), 15);
   }
   onLine(fn: (l: string) => void) { this.fn = fn; }
