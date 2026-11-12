@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, type PageId } from "../lib/app.svelte";
+  import { app, outName, type PageId } from "../lib/app.svelte";
   import { rawToDb } from "../lib/device";
   import Icon from "../components/Icon.svelte";
 
@@ -52,7 +52,7 @@
       {#each d.gain.out as raw, i}
         <div class="chan" class:muted={!!d.mute[i]}>
           <span class="n num">{i + 1}</span>
-          <span class="nm">{d.channelNames[i + 1] || `Ausgang ${i + 1}`}</span>
+          <span class="nm">{outName(i + 1)}</span>
           <span class="v num">{d.mute[i] ? "stumm" : `${db(raw)} dB`}</span>
         </div>
       {/each}

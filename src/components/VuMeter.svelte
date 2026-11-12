@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { app } from "../lib/app.svelte";
+  import { app, inName } from "../lib/app.svelte";
   import { INPUT_PAIRS, vuToDb } from "../lib/device";
 
   // Level of the input pair that carries the signal. The firmware delivers RMS values a few
@@ -19,7 +19,7 @@
       const d = Math.max(vuToDb(vu[p.in[0] - 1] ?? 0), vuToDb(vu[p.in[1] - 1] ?? 0));
       if (d > bestDb) { bestDb = d; best = p; }
     }
-    label = bestDb > FLOOR ? best.label : "kein Signal";
+    label = bestDb > FLOOR ? `${inName(best.in[0])} / ${inName(best.in[1])}` : "kein Signal";
     const now = best.in.map((i) => Math.max(FLOOR, vuToDb(vu[i - 1] ?? 0))) as [number, number];
     const prev = untrack(() => shown);  // not a dependency: only a new reading moves the bars
     shown = [Math.max(now[0], prev[0] - FALL_DB), Math.max(now[1], prev[1] - FALL_DB)];

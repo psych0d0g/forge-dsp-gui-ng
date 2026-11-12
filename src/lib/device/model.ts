@@ -1,5 +1,6 @@
 import type { Answer } from "../protocol/answer";
 import type { Value } from "../protocol/request";
+import { limitsOf, type Limits } from "./limits";
 
 /** `gain.*.scale` = [min, max, raw value of 0 dB, dB per step, dB at min(, channels)] */
 export interface GainScale {
@@ -276,12 +277,9 @@ export const modcTypeVersion = (s: DeviceState, type: number) => s.modcVersions[
 
 export const isPort = (s: DeviceState) => s.identity.port !== null;
 
-/** Stereo pairs of the inputs for the level meter, [left, right] as 1-based input numbers.
- * From the DSP analysis (forge-dsp-firmware#43); left/right still to be confirmed on a device (#52). */
-export const INPUT_PAIRS: { label: string; in: [number, number] }[] = [
-  { label: "Kanal 1", in: [6, 5] }, { label: "Kanal 2", in: [4, 3] }, { label: "Kanal 3", in: [2, 1] },
-  { label: "Digital", in: [7, 8] },
-];
+/** Stereo pairs of the inputs for the level meter, as input numbers (= mixer columns G: 1..6
+ * analog, 7/8 digital). system.vu is expected in this numbering (forge-dsp-firmware#52). */
+export const INPUT_PAIRS: { in: [number, number] }[] = [{ in: [1, 2] }, { in: [3, 4] }, { in: [5, 6] }, { in: [7, 8] }];
 
 /** level in dBFS from the gain-scale value of system.vu; 0 = no signal */
 export const vuToDb = (v: number) => (v > 0 ? (v - 255) / 2 : -Infinity);
@@ -294,17 +292,11 @@ export interface DelayGroup {
   budget: number;
 }
 
-/** Not readable from the device yet (forge-dsp-firmware#54; its delay.left is wrong on devices with
- * three DSPs, #53): on all models the outputs sit in blocks of four on one DSP each, and the delay
- * lines of a DSP share 5840 samples (flow_max_samples). */
-export const DELAY_POOL_SAMPLES = 5840;
-export const DELAY_POOL_CHANNELS = 4;
-
-export function delayGroups(s: DeviceState): DelayGroup[] {
+export function delayGroups(s: DeviceState, l: Limits = limitsOf(s)): DelayGroup[] {
   const groups: DelayGroup[] = [];
-  for (let c = 1; c <= s.delay.out.length; c += DELAY_POOL_CHANNELS)
-    groups.push({ channels: Array.from({ length: Math.min(DELAY_POOL_CHANNELS, s.delay.out.length - c + 1) }, (_, i) => c + i),
-      budget: DELAY_POOL_SAMPLES });
+  for (let c = 1; c <= s.delay.out.length; c += l.delayPoolChannels)
+    groups.push({ channels: Array.from({ length: Math.min(l.delayPoolChannels, s.delay.out.length - c + 1) }, (_, i) => c + i),
+      budget: l.delayPool });
   return groups;
 }
 
@@ -328,4 +320,26 @@ export function alignFromDistances(distCm: (number | null)[], rate: number): num
   const known = distCm.filter((d): d is number => d !== null && d > 0);
   const far = known.length ? Math.max(...known) : 0;
   return distCm.map((d) => (d !== null && d > 0 ? cmToSamples(far - d, rate) : 0));
+}
+
+// --- mixer ---------------------------------------------------------------------------------------
+// mixer.P.C.G as the firmware numbers it (forge-dsp-firmware docs/dsp-images.md, GUI page INMI21):
+// rows C 1/2 = the two pre-processing buses (biquad channels 35/36), C 3..10 = outputs 1..8;
+// columns G 1..8 = inputs (1..6 analog = gain.in.N, 7/8 digital = gain.spdif), G 9/10 = the buses
+// into an output. mixer.P.1.10 is the input select of the position.
+export const MIXER_BUS_ROWS = [1, 2];
+export const MIXER_INPUTS = 8;
+export const mixerRowOfOutput = (out: number) => out + 2;
+export const MIXER_BUS_COLUMNS = [9, 10];
+
+/** names of the input select values per model (original GUI, page_inmi21_radio_labels) */
+const SOURCES: Record<string, string[]> = {
+  "96LN": ["", "S/PDIF optisch", "S/PDIF koaxial", "Bluetooth"],
+  default: ["Bluetooth", "USB Audio", "S/PDIF optisch 1", "S/PDIF optisch 2", "S/PDIF koaxial"],
+};
+
+export function sourceNames(s: DeviceState): { value: number; label: string }[] {
+  const names = SOURCES[s.identity.model] ?? SOURCES.default;
+  const count = Math.max(names.length, s.mixer.inputMax ?? 0);
+  return Array.from({ length: count }, (_, i) => ({ value: i + 1, label: names[i] || `Quelle ${i + 1}` }));
 }

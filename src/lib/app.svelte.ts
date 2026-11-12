@@ -53,6 +53,7 @@ export async function connect(kind: "usb" | "esp" | "demo") {
       app.progress = null;
       if (!app.device.identity.keyInfo && !app.device.identity.firmware) throw new Error("Kein Forge antwortet an diesem Anschluss.");
     }
+    loadInNames();
     app.status = "online";
   } catch (e) {
     app.error = e instanceof Error ? e.message : String(e);
@@ -154,3 +155,42 @@ async function poll() {
   }
 }
 if (typeof window !== "undefined") setInterval(poll, VU_MS);
+
+// --- channel names --------------------------------------------------------------------------------
+// Outputs: in the device (system.channel.name.N). Inputs: the firmware has no place for them yet
+// (forge-dsp-firmware#55), so they live in this browser, per device serial. Default: the number.
+const inNames = $state<Record<number, string>>({});
+const serialOf = () => app.device.identity.keyInfo.split("-")[3] || "unknown";
+const namesKey = () => `forge-in-names:${serialOf()}`;
+
+export function loadInNames() {
+  for (const k of Object.keys(inNames)) delete inNames[Number(k)];
+  try {
+    Object.assign(inNames, JSON.parse(localStorage.getItem(namesKey()) ?? "{}"));
+  } catch { /* no storage: names last for this session */ }
+}
+
+/** quotes, ';' and line breaks cannot be sent; the device keeps 16 characters */
+export function cleanName(t: string): string {
+  let v = t.replace(/["; \r\n]+/g, " ").trim();
+  while (new TextEncoder().encode(v).length > 16) v = v.slice(0, -1);  // 16 bytes, umlauts count twice
+  return v.trim();
+}
+
+export const outName = (ch: number) => app.device.channelNames[ch] || `Ausgang ${ch}`;
+export const inName = (n: number) => inNames[n] || `Eingang ${n}`;
+export const outNameRaw = (ch: number) => app.device.channelNames[ch] ?? "";
+export const inNameRaw = (n: number) => inNames[n] ?? "";
+
+export function setOutName(ch: number, name: string) {
+  const v = cleanName(name);
+  app.device.channelNames[ch] = v;
+  write(`system.channel.name.${ch}`, v);
+}
+
+export function setInName(n: number, name: string) {
+  const v = cleanName(name);
+  if (v) inNames[n] = v;
+  else delete inNames[n];
+  try { localStorage.setItem(namesKey(), JSON.stringify(inNames)); } catch { /* see above */ }
+}

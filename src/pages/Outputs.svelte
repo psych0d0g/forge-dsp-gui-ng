@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { app, write } from "../lib/app.svelte";
+  import { app, outNameRaw, setOutName, write } from "../lib/app.svelte";
+  import NameField from "../components/NameField.svelte";
   import Fader from "../components/Fader.svelte";
   import Icon from "../components/Icon.svelte";
 
@@ -24,7 +25,7 @@
 </script>
 
 <header class="head">
-  <div><h2>Ausgänge</h2><p class="muted">Pegel, Stummschaltung und Polarität je Kanal. Doppelklick auf einen Regler setzt 0 dB.</p></div>
+  <div><h2>Ausgänge</h2><p class="muted">Pegel, Stummschaltung und Polarität je Kanal. Doppelklick auf einen Regler setzt 0 dB, ein Klick auf den Namen benennt den Kanal.</p></div>
 </header>
 
 {#if d.scales.out}
@@ -40,7 +41,8 @@
           {#if ch <= d.gain.out.length}
             <div class="row">
               <span class="chn num">{ch}</span>
-              <span class="name" title={d.channelNames[ch] || ""}>{d.channelNames[ch] || `Ausgang ${ch}`}</span>
+              <span class="name"><NameField value={outNameRaw(ch)} placeholder="Ausgang {ch}" label="Name Ausgang {ch}"
+                onchange={(n) => setOutName(ch, n)} /></span>
               <Fader value={d.gain.out[ch - 1]} scale={d.scales.out} dim={!!d.mute[ch - 1]} label="Pegel Ausgang {ch}"
                 onchange={(raw) => gain(ch, raw, p)} />
               <button class="sw mute" class:on={!!d.mute[ch - 1]} aria-pressed={!!d.mute[ch - 1]} title="Stumm"
@@ -66,7 +68,7 @@
   .link.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .row { display: flex; align-items: center; gap: .65rem; min-width: 0; }
   .chn { width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: 6px; background: var(--raised); color: var(--muted); font-size: .8rem; flex: none; }
-  .name { width: 7.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+  .name { width: 8.5rem; flex: none; }
   .sw { width: 2rem; height: 2rem; padding: 0; font-weight: 650; flex: none; color: var(--muted); }
   .sw.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--accent); }
   .sw.mute.on { background: color-mix(in srgb, var(--err) 22%, transparent); border-color: var(--err); color: var(--err); }

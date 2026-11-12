@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, write } from "../lib/app.svelte";
+  import { app, outName, write } from "../lib/app.svelte";
   import { alignFromDistances, cmToSamples, delayGroups, delayMax, msToSamples, samplesToCm, samplesToMs } from "../lib/device";
   import Slider from "../components/Slider.svelte";
 
@@ -71,7 +71,7 @@
         {@const max = delayMax(d, g, ch)}
         <div class="row">
           <span class="chn num">{ch}</span>
-          <span class="name">{d.channelNames[ch] || `Ausgang ${ch}`}</span>
+          <span class="name">{outName(ch)}</span>
           <Slider value={d.delay.out[ch - 1] ?? 0} max={sliderMax} label="Laufzeit Ausgang {ch}"
             onchange={(v) => set(ch, v, max)} />
           <label class="readout num"><input value={show(d.delay.out[ch - 1] ?? 0)} onchange={(e) => typed(e, ch, max)}
@@ -88,7 +88,7 @@
     alle anderen so viel, wie ihr Schall zu früh ankäme (Schallgeschwindigkeit 343 m/s).</p>
   <div class="dists">
     {#each d.delay.out as _, i}
-      <label><span>{d.channelNames[i + 1] || `Ausgang ${i + 1}`}</span>
+      <label><span>{outName(i + 1)}</span>
         <span class="in"><input class="num" inputmode="decimal" placeholder="–" bind:value={dist[i + 1]} /><span class="muted">cm</span></span>
         <span class="muted num small">{anyDist ? `→ ${show(wanted[i])} ${unit === "samples" ? "S" : unit}` : ""}</span></label>
     {/each}

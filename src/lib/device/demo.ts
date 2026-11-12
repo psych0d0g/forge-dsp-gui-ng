@@ -14,7 +14,17 @@ export function demoState(): DeviceState {
   s.mute = [0, 0, 0, 0, 0, 0, 1, 1];
   s.phase = [0, 0, 0, 1, 0, 0, 0, 0];
   s.delay = { out: [0, 12, 48, 55, 96, 96, 0, 0], in: [0, 0, 0, 0, 0, 0, 0, 0] };
-  s.mixer = { position: 1, input: 3, inputMax: 8, values: { 1: {} } };
+  s.mixer = { position: 1, input: 3, inputMax: 5, values: {} };
+  for (let p = 1; p <= 4; p++) {
+    const g: Record<number, Record<number, number>> = {};
+    for (let c = 1; c <= 10; c++) {
+      g[c] = {};
+      for (let i = 1; i <= 10; i++) if (i <= 8 || (c > 2 && i <= 10)) g[c][i] = 0;
+    }
+    g[1][10] = p === 1 ? 3 : p === 2 ? 2 : 1;
+    for (let o = 1; o <= 8; o++) g[o + 2][p === 3 ? (o % 2 ? 2 : 1) : o % 2 ? 8 : 7] = 100;  // left/right of one source
+    s.mixer.values[p] = g;
+  }
   ["Hochton L", "Hochton R", "Mittelton L", "Mittelton R", "Tiefton L", "Tiefton R", "Sub L", "Sub R"]
     .forEach((n, i) => (s.channelNames[i + 1] = n));
   for (let ch = 1; ch <= 8; ch++) {
