@@ -1,8 +1,8 @@
 <script lang="ts">
   // Rotary control: drag up/down, wheel or arrow keys while focused, value editable below.
-  let { value, min = 0, max = 100, step = 1, label, caption = "", unit = "", onchange }:
+  let { value, min = 0, max = 100, step = 1, label, caption = "", unit = "", size = 56, disabled = false, onchange }:
     { value: number; min?: number; max?: number; step?: number; label: string; caption?: string; unit?: string;
-      onchange: (v: number) => void } = $props();
+      size?: number; disabled?: boolean; onchange: (v: number) => void } = $props();
 
   const START = -135, SWEEP = 270, R = 20;
   const frac = $derived(max > min ? (Math.min(max, Math.max(min, value)) - min) / (max - min) : 0);
@@ -18,7 +18,7 @@
   const tip = $derived(polar(angle, 13));
 
   const clamp = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step));
-  const emit = (v: number) => { const c = clamp(v); if (c !== value) onchange(c); };
+  const emit = (v: number) => { const c = clamp(v); if (!disabled && c !== value) onchange(c); };
 
   let drag: { y: number; start: number } | null = null;
   function down(e: PointerEvent) {
@@ -47,9 +47,9 @@
   }
 </script>
 
-<div class="knob" class:zero={value <= min}>
+<div class="knob" class:zero={value <= min} class:disabled style="width:{size + 12}px">
   {#if caption}<span class="cap" title={caption}>{caption}</span>{/if}
-  <svg viewBox="0 0 56 56" width="56" height="56" role="slider" tabindex="0" aria-label={label} aria-valuemin={min}
+  <svg viewBox="0 0 56 56" width={size} height={size} role="slider" tabindex={disabled ? -1 : 0} aria-disabled={disabled} aria-label={label} aria-valuemin={min}
     aria-valuemax={max} aria-valuenow={value} onpointerdown={down} onpointermove={move} onpointerup={() => (drag = null)}
     onpointercancel={() => (drag = null)} onkeydown={key} onwheel={wheel} ondblclick={() => emit(value > min ? min : max)}>
     <path class="rail" d={arc(START, START + SWEEP)} />
@@ -57,11 +57,13 @@
     <circle class="cap-c" cx="28" cy="28" r="14" />
     <line class="tick" x1="28" y1="28" x2={tip[0]} y2={tip[1]} />
   </svg>
-  <label class="val num"><input value={String(value)} inputmode="numeric" aria-label="{label}, Wert" onchange={typed} />{#if unit}<span>{unit}</span>{/if}</label>
+  <label class="val num"><input value={String(value)} inputmode="numeric" aria-label="{label}, Wert" {disabled} onchange={typed} />{#if unit}<span>{unit}</span>{/if}</label>
 </div>
 
 <style>
-  .knob { display: grid; justify-items: center; gap: .15rem; width: 4.25rem; }
+  .knob { display: grid; justify-items: center; gap: .1rem; }
+  .knob.disabled { opacity: .4; }
+  .knob.disabled svg { cursor: default; }
   .cap { font-size: .74rem; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   svg { touch-action: none; cursor: ns-resize; border-radius: 50%; }
   svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -72,7 +74,7 @@
   .tick { stroke: var(--fg); stroke-width: 2; stroke-linecap: round; }
   .zero .tick { stroke: var(--faint); }
   .val { display: flex; align-items: baseline; gap: .15rem; font-size: .75rem; color: var(--muted); }
-  .val input { width: 2.6rem; text-align: center; border: 1px solid transparent; background: none; padding: .1rem .15rem; border-radius: 6px;
+  .knob .val input { width: 2.6rem; text-align: center; border: 1px solid transparent; background: none; padding: .1rem .15rem; border-radius: 6px;
     font: inherit; font-size: .9rem; color: var(--fg); }
   .zero .val input:not(:focus) { color: var(--faint); }
   .val input:hover { border-color: var(--line-strong); }

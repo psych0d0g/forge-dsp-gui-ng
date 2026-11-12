@@ -45,7 +45,7 @@
     </button>
     <span class="arrow" aria-hidden="true"></span>
   {/each}
-  <button class="panel stage outs" onclick={() => go("outputs")}>
+  <button class="panel stage outs" onclick={() => go("mixer")}>
     <span class="ico"><Icon name="outputs" size={20} /></span>
     <strong>Ausgänge</strong>
     <div class="chans">

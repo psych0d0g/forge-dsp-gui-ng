@@ -6,7 +6,6 @@
   import Icon from "./components/Icon.svelte";
   import VuMeter from "./components/VuMeter.svelte";
   import Overview from "./pages/Overview.svelte";
-  import Outputs from "./pages/Outputs.svelte";
   import Console from "./pages/Console.svelte";
   import Delay from "./pages/Delay.svelte";
   import Mixer from "./pages/Mixer.svelte";
@@ -26,9 +25,7 @@
   const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
     { group: "Gerät", items: [{ id: "overview", label: "Übersicht" }] },
     { group: "Signalweg", items: [
-      { id: "mixer", label: "Eingänge & Mixer" },
-      { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" },
-      { id: "outputs", label: "Ausgänge" }] },
+      { id: "mixer", label: "Mixer" }, { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" }] },
     { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
     { group: "Werkzeuge", items: [
       { id: "diagnose", label: "Diagnose" }, { id: "firmware", label: "Firmware" },
@@ -42,7 +39,7 @@
     if (q.get("theme") === "dark" || q.get("theme") === "light") theme = q.get("theme") as "dark" | "light";
     if (q.has("demo")) {
       await connect("demo");
-      if (q.get("page")) app.page = (q.get("page") === "inputs" ? "mixer" : q.get("page")) as PageId;
+      if (q.get("page")) app.page = (["inputs", "outputs"].includes(q.get("page")!) ? "mixer" : q.get("page")) as PageId;
       return;
     }
     onBridge = await servedByBridge();
@@ -139,7 +136,6 @@
         </section>
       </div>
     {:else if app.page === "overview"}<Overview />
-    {:else if app.page === "outputs"}<Outputs />
     {:else if app.page === "delay"}<Delay />
     {:else if app.page === "mixer"}<Mixer />
     {:else if app.page === "filters"}<Filters />
