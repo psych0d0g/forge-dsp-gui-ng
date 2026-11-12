@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { app, inDefault, inName, outName, write } from "../lib/app.svelte";
+  import { app, inDefault, inName, inNameRaw, outName, write } from "../lib/app.svelte";
   import { alignFromDistances, cmToSamples, delayGroups, delayMax, inputDelayGroup, inputsLeftFirst, msToSamples, samplesToCm,
     samplesToMs, type DelayGroup } from "../lib/device";
   import VFader from "../components/VFader.svelte";
 
-  // Laid out like the mixer: one strip per channel with an upright fader, grouped by the delay
-  // memory the channels share (the inputs, and each block of four outputs).
+  // Laid out like the mixer, top to bottom as the signal flows: the inputs, below them the
+  // outputs; one strip per channel with an upright fader, grouped by the delay memory the
+  // channels share (the inputs, and each block of four outputs).
   type Unit = "ms" | "cm" | "samples";
   let unit = $state<Unit>("ms");
   const d = $derived(app.device);
@@ -57,11 +58,11 @@
   }
 </script>
 
-{#snippet strip(side: Side, ch: number, g: DelayGroup, nr: string, name: string)}
+{#snippet strip(side: Side, ch: number, g: DelayGroup, nr: string, name: string, shown: string = name)}
   {@const v = list(side)[ch - 1] ?? 0}
   <div class="strip" class:zero={!v}>
     <span class="chn num">{nr}</span>
-    <span class="sname" title={name}>{name}</span>
+    <span class="sname" title={name}>{shown || "\u00a0"}</span>
     <VFader frac={v / span} label="Laufzeit {name}" valuetext="{show(v)} {U}"
       onfrac={(f) => set(side, ch, f * span, g)} onstep={(dir) => set(side, ch, v + dir * (unit === "samples" ? 1 : Math.max(1, Math.round(rate / 10000))), g)} />
     <label class="val num"><input value={show(v)} onchange={(e) => typed(e, side, ch, g)} aria-label="Laufzeit {name} in {U}" /><span>{U}</span></label>
@@ -95,15 +96,18 @@
   </div>
 </header>
 
-<section class="panel desk">
-  {#if inGroup}
+{#if inGroup}
+  <section class="panel desk">
     <div class="group">
-      <div class="ghead"><h3>Eingänge</h3>{@render meter("in", inGroup)}</div>
+      <div class="ghead"><h3>Eingänge (Analog)</h3>{@render meter("in", inGroup)}</div>
       <div class="strips">
-        {#each inOrder as n}{@render strip("in", n, inGroup, inDefault(n).replace(/^Eingang /, ""), inName(n))}{/each}
+        {#each inOrder as n}{@render strip("in", n, inGroup, inDefault(n).replace(/^Eingang /, ""), inName(n), inNameRaw(n))}{/each}
       </div>
     </div>
-  {/if}
+  </section>
+{/if}
+
+<section class="panel desk">
   {#each outGroups as g}
     <div class="group">
       <div class="ghead"><h3>Ausgänge {g.channels[0]}–{g.channels[g.channels.length - 1]}</h3>{@render meter("out", g)}</div>
@@ -131,6 +135,7 @@
   .units button.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); }
 
   .desk { padding: .9rem 1rem; display: flex; gap: 1rem; overflow-x: auto; flex: none; align-items: flex-start; }
+  .desk + .desk { margin-top: .75rem; }
   .group { display: grid; gap: .55rem; flex: none; }
   .ghead { display: grid; gap: .3rem; padding: .3rem .5rem .4rem; border-radius: 8px 8px 0 0; background: var(--raised); border-bottom: 2px solid var(--line-strong); }
   .ghead h3 { text-align: center; }

@@ -4,10 +4,13 @@
   import type { Biquad } from "../lib/device";
   import { chainResponse, coeffs, isActive, logFreqs, typeInfo } from "../lib/dsp/biquad";
 
-  let { filters, rate, freq, view, gainRange, selected, showPhase, onselect, onmove, onq }: {
+  let { filters, rate, freq, view, overlays = [], gainRange, selected, showPhase, onselect, onmove, onq }: {
     filters: { n: number; bq: Biquad; label?: string | number }[]; rate: number; freq: [number, number];
     /** range of the frequency axis (a section of `freq`); the handles still move within `freq` */
-    view?: [number, number]; gainRange: [number, number];
+    view?: [number, number];
+    /** other channels drawn behind this one, for comparison */
+    overlays?: { name: string; color: string; filters: Biquad[] }[];
+    gainRange: [number, number];
     selected: number | null; showPhase: boolean; onselect: (n: number) => void;
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
   } = $props();
@@ -24,6 +27,7 @@
   const freqs = $derived(logFreqs(lo, hi, 260));
   const active = $derived(filters.filter((f) => isActive(f.bq)));
   const total = $derived(chainResponse(active.map((f) => coeffs(f.bq, rate)), freqs, rate));
+  const others = $derived(overlays.map((o) => ({ ...o, curve: chainResponse(o.filters.filter(isActive).map((b) => coeffs(b, rate)), freqs, rate) })));
   const sel = $derived(active.find((f) => f.n === selected));
   const single = $derived(sel ? chainResponse([coeffs(sel.bq, rate)], freqs, rate) : null);
   const line = (v: number[], fy: (v: number) => number) => v.map((d, i) => `${i ? "L" : "M"}${x(freqs[i]).toFixed(1)} ${fy(d).toFixed(1)}`).join("");
@@ -82,6 +86,10 @@
     {#each [-180, -90, 0, 90, 180] as p}<text class="axis ph" x={W - R + 6} y={yPhase(p) + 4}>{p}°</text>{/each}
     <path class="phase" d={phasePath} />
   {/if}
+  {#each others as o}
+    <path class="other" style="stroke:{o.color}" d={line(o.curve.db, y)}><title>{o.name}</title></path>
+    {#if showPhase}<path class="other ph" style="stroke:{o.color}" d={o.curve.phase.map((p, i) => `${i === 0 || Math.abs(p - o.curve.phase[i - 1]) > 180 ? "M" : "L"}${x(freqs[i]).toFixed(1)} ${yPhase(p).toFixed(1)}`).join("")} />{/if}
+  {/each}
   {#if area}<path class="single" d={area} />{/if}
   <path class="total" d={line(total.db, y)} />
   {#each active.filter((f) => f.bq.f >= lo && f.bq.f <= hi) as f}
@@ -103,6 +111,8 @@
   .axis.ph { fill: var(--muted); }
   .total { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; }
   .single { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: color-mix(in srgb, var(--accent) 55%, transparent); stroke-width: 1; }
+  .other { fill: none; stroke-width: 1.8; stroke-linejoin: round; opacity: .9; }
+  .other.ph { stroke-width: 1.1; stroke-dasharray: 5 4; opacity: .7; }
   .phase { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 5 4; }
   .handle circle { fill: var(--panel); stroke: var(--accent); stroke-width: 2; cursor: grab; }
   .handle.sel circle { fill: var(--accent); }

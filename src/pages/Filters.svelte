@@ -25,6 +25,13 @@
   let selected = $state<number | null>(null);
   let showPhase = $state(false);
   let linked = $state(false);
+  // other channels laid over the curve, each in its own colour (readable on dark and light)
+  const COLORS = ["#f59e0b", "#10b981", "#ec4899", "#a78bfa", "#22d3ee", "#ef4444", "#84cc16", "#94a3b8", "#fb7185", "#38bdf8"];
+  const colorOf = (c: number) => COLORS[Math.max(0, channels.indexOf(c)) % COLORS.length];
+  // ?over=3,5 starts with these channels overlaid
+  let over = $state<number[]>((new URLSearchParams(location.search).get("over") ?? "").split(",").map(Number).filter((n) => n > 0));
+  const overlays = $derived(over.filter((c) => c !== ch && d.biquads[c]).map((c) => ({ name: chName(c), color: colorOf(c), filters: Object.values(d.biquads[c]) })));
+  const toggleOver = (c: number) => { over = over.includes(c) ? over.filter((x) => x !== c) : [...over, c]; view = section(); };
   const partner = (c: number) => (c > 30 ? (c === 35 ? 36 : 35) : c % 2 ? c + 1 : c - 1);
 
   // Two kinds of biquads: EQ bands (peaking, by Q or by bandwidth) below the curve, and filters
@@ -43,7 +50,8 @@
   // when an interaction ends, so the axis does not move while a point is dragged.
   let zoom = $state(true);
   let view = $state<[number, number] | undefined>(undefined);
-  const section = () => viewRange(slots.filter((s) => isActive(s.bq) && s.bq.type !== 19).map((s) => s.bq.f), lim.freq);
+  const section = () => viewRange([...slots.map((s) => s.bq), ...over.filter((c) => c !== ch).flatMap((c) => Object.values(d.biquads[c] ?? {}))]
+    .filter((b) => isActive(b) && b.type !== 19).map((b) => b.f), lim.freq);  // the overlaid channels count as well
   async function resort() {
     view = section();
     const next = byFreq();
@@ -228,7 +236,17 @@
         <input type="checkbox" bind:checked={linked} /> mit {chName(partner(ch))} koppeln</label>
     {/if}
   </div>
-  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} view={zoom ? view : undefined} gainRange={lim.bqGain} {selected} {showPhase}
+  {#if channels.length > 1}
+    <div class="overlay" role="group" aria-label="Weitere Kanäle über die Kurve legen">
+      <span class="muted">Dazu legen:</span>
+      {#each channels.filter((c) => c !== ch) as c}
+        <button class="chip" class:on={over.includes(c)} aria-pressed={over.includes(c)} style="--c:{colorOf(c)}" onclick={() => toggleOver(c)}>
+          <span class="swatch"></span>{c < 30 ? `${c} ` : ""}{chName(c)}</button>
+      {/each}
+      {#if over.length}<button class="ghost clear" onclick={() => { over = []; view = section(); }}>keine</button>{/if}
+    </div>
+  {/if}
+  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} view={zoom ? view : undefined} {overlays} gainRange={lim.bqGain} {selected} {showPhase}
     onselect={(n) => (selected = n)}
     onmove={(n, f, g) => update(n, g === null ? { f } : { f, gain: g })}
     onq={(n, k) => update(n, { q: clamp(Math.round(d.biquads[ch][n].q * k), lim.bqQ) })} />
@@ -292,6 +310,12 @@
   .plothead h3 { margin-right: auto; }
   .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; }
   .check input { accent-color: var(--accent); }
+  .overlay { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-bottom: .4rem; font-size: .8rem; }
+  .chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem; font-size: .78rem; color: var(--muted); border-radius: 99px; }
+  .chip .swatch { width: .6rem; height: .6rem; border-radius: 50%; border: 1.5px solid var(--c); }
+  .chip.on { color: var(--fg); border-color: var(--c); }
+  .chip.on .swatch { background: var(--c); }
+  .clear { font-size: .78rem; color: var(--muted); padding: .15rem .4rem; }
 
   /* filter cards wrap onto further rows; the band strips stay in one row and scroll sideways */
   .cards { display: flex; flex-wrap: wrap; gap: .5rem; align-items: stretch; }
