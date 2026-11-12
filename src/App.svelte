@@ -15,7 +15,7 @@
   import Diagnose from "./pages/Diagnose.svelte";
   import Presets from "./pages/Presets.svelte";
   import ModcPage from "./pages/Modc.svelte";
-  import Planned from "./pages/Planned.svelte";
+  import Firmware from "./pages/Firmware.svelte";
 
   const version = __APP_VERSION__;
   const commit = __APP_COMMIT__;
@@ -24,20 +24,17 @@
   let theme = $state<"dark" | "light" | "">("");
 
   // navigation in the order of the signal path, then control, then tools
-  const NAV: { group: string; items: { id: PageId; label: string; ready?: boolean }[] }[] = [
-    { group: "Gerät", items: [{ id: "overview", label: "Übersicht", ready: true }] },
+  const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
+    { group: "Gerät", items: [{ id: "overview", label: "Übersicht" }] },
     { group: "Signalweg", items: [
-      { id: "inputs", label: "Eingänge", ready: true }, { id: "mixer", label: "Mixer", ready: true },
-      { id: "filters", label: "Filter & EQ", ready: true }, { id: "delay", label: "Laufzeit", ready: true },
-      { id: "outputs", label: "Ausgänge", ready: true }] },
-    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke", ready: true }, { id: "presets", label: "Presets", ready: true }] },
+      { id: "inputs", label: "Eingänge" }, { id: "mixer", label: "Mixer" },
+      { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" },
+      { id: "outputs", label: "Ausgänge" }] },
+    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
     { group: "Werkzeuge", items: [
-      { id: "diagnose", label: "Diagnose", ready: true }, { id: "firmware", label: "Firmware" },
-      { id: "console", label: "Konsole", ready: true }] },
+      { id: "diagnose", label: "Diagnose" }, { id: "firmware", label: "Firmware" },
+      { id: "console", label: "Konsole" }] },
   ];
-  const PLANNED: Partial<Record<PageId, { title: string; text: string; issue: number }>> = {
-    firmware: { title: "Firmware", issue: 10, text: "Firmware-Update direkt aus dem Browser, mit Sicherung vorab." },
-  };
 
   onMount(async () => {
     theme = (localStorage.getItem("theme") as "dark" | "light" | null) ?? "";
@@ -77,7 +74,7 @@
         {#each g.items as it}
           <button class="navitem" class:active={app.page === it.id} aria-current={app.page === it.id ? "page" : undefined}
             onclick={() => open(it.id)}>
-            <Icon name={it.id} /><span>{it.label}</span>{#if !it.ready}<span class="tag">bald</span>{/if}
+            <Icon name={it.id} /><span>{it.label}</span>
           </button>
         {/each}
       {/each}
@@ -151,8 +148,8 @@
     {:else if app.page === "diagnose"}<Diagnose />
     {:else if app.page === "presets"}<Presets />
     {:else if app.page === "modc"}<ModcPage />
+    {:else if app.page === "firmware"}<Firmware />
     {:else if app.page === "console"}<Console />
-    {:else if PLANNED[app.page]}<Planned {...PLANNED[app.page]!} />
     {/if}
   </main>
 

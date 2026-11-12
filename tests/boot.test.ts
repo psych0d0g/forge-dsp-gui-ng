@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { crc16, encodeFrame, FrameDecoder, CrcError } from "../src/lib/boot/protocol";
 import { parseHex, HexError } from "../src/lib/boot/ihex";
-import { Bootloader, imageContains, NoAnswer, paddedImage, BootError } from "../src/lib/boot/client";
+import { Bootloader, imageContains, imageKnows, NoAnswer, paddedImage, BootError } from "../src/lib/boot/client";
 import { SimTarget } from "../src/lib/boot/sim";
 
 describe("framing", () => {
@@ -95,5 +95,85 @@ describe("bootloader client against the simulated target", () => {
     const img = new TextEncoder().encode("xx96ELN-4.0\0CORED8-4.0\0");
     expect(imageContains(img, "CORED8-4.0")).toBe(true);
     expect(imageContains(img, "96LN-3.0")).toBe(false);
+    // as the release images hold them: models and PCB versions as separate strings
+    const v4x = new TextEncoder().encode("..96ELN\0CORED8\0..4.0\0" + "0.0\0" + "4.1\0");
+    expect(imageKnows(v4x, "96ELN", "4.0")).toBe(true);
+    expect(imageKnows(v4x, "CORED8", "4.1")).toBe(true);
+    expect(imageKnows(v4x, "96ELN3", "4.0")).toBe(false);     // "96ELN\0" is not "96ELN3\0"
+    expect(imageKnows(v4x, "96LN", "3.0")).toBe(false);
+    expect(imageKnows(new TextEncoder().encode("96ELN3\0" + "4.0\0"), "96ELN", "4.0")).toBe(false);
+  });
+});
+
+import { runUpdate, UpdateError, type Step } from "../src/lib/boot/update";
+
+describe("update sequence", () => {
+  const image = Uint8Array.from({ length: 3000 }, (_, i) => (i * 5 + 1) & 0xff);
+  function rig(t: SimTarget, opts: { identityAfter?: string; knowsKeySet?: boolean } = {}) {
+    const lines: string[] = [], steps: Step[] = [];
+    let key = opts.identityAfter ?? "96ELN-4.0";
+    let backup: [number, number] | null = null;
+    const io = {
+      link: t,
+      sendLine: async (l: string) => {
+        lines.push(l);
+        const m = /system\.key\.info="(.*)"/.exec(l);
+        if (m && opts.knowsKeySet !== false) key = m[1];
+        await t.write(new TextEncoder().encode(l + "\r\n"));   // text also reaches the port
+      },
+      ask: async (reg: string) => (!t.started ? "" : reg === "system.ping" ? '"pong"' : `"BNS-${key}-SERIAL-CC-1-MDD"`),
+      onStep: (s: Step) => { if (steps.at(-1) !== s) steps.push(s); },
+      onBackup: (f: Uint8Array, e: Uint8Array) => { backup = [f.length, e.length]; },
+      sleep: async () => {},
+    };
+    return { io, lines, steps, backup: () => backup };
+  }
+
+  it("runs all steps, with backup, identity unchanged", async () => {
+    const t = new SimTarget();
+    t.flash.fill(0x11, 0, 100);
+    const r = rig(t);
+    const res = await runUpdate(r.io, { image, backup: true, identity: "96ELN-4.0", connectMs: 2000, startMs: 500 });
+    expect(res).toEqual({ bootloader: "1.0", written: 3072 });
+    expect(r.steps).toEqual(["enter", "connect", "backup", "write", "verify", "start", "identity"]);
+    expect(r.backup()).toEqual([0x40000, 0x1000]);
+    expect(r.lines).toEqual(["", "set.1 system.boot=1"]);
+    expect([...t.flash.subarray(0, 3000)]).toEqual([...image]);
+    expect(t.started).toBe(true);
+  });
+
+  it("sets the identity again when the new firmware reports another", async () => {
+    const t = new SimTarget();
+    const r = rig(t, { identityAfter: "96ELN-4.0" });
+    await runUpdate(r.io, { image, backup: false, identity: "CORED8-4.1", connectMs: 2000, startMs: 500 });
+    expect(r.lines.at(-1)).toBe('set.1 system.key.info="CORED8-4.1"');
+    expect(r.steps).not.toContain("backup");
+  });
+
+  it("no bootloader: fails before the flash is touched", async () => {
+    const t = new SimTarget();
+    t.deaf = 100000;
+    const r = rig(t);
+    const e = await runUpdate(r.io, { image, backup: false, identity: "", connectMs: 150, startMs: 100 }).catch((x) => x);
+    expect(e).toBeInstanceOf(UpdateError);
+    expect(e.flashTouched).toBe(false);
+    expect(e.step).toBe("connect");
+    expect(t.flash.every((b) => b === 0xff)).toBe(true);
+  });
+
+  it("a lost answer while writing: reported with the flash touched; a second run resumes in the bootloader", async () => {
+    const t = new SimTarget();
+    const r = rig(t);
+    t.dropAnswer = 9;
+    const e = await runUpdate(r.io, { image, backup: false, identity: "", connectMs: 2000, startMs: 100 }).catch((x) => x);
+    expect(e).toBeInstanceOf(UpdateError);
+    expect(e.step).toBe("write");
+    expect(e.flashTouched).toBe(true);
+    t.dropAnswer = 0;
+    const r2 = rig(t);
+    await runUpdate(r2.io, { image, backup: false, identity: "", connectMs: 2000, startMs: 500 });
+    expect(r2.lines).toEqual([]);                             // no boot command: it was still in the bootloader
+    expect(r2.steps[0]).toBe("enter");
+    expect([...t.flash.subarray(0, 3000)]).toEqual([...image]);
   });
 });

@@ -1,14 +1,8 @@
 // chip45boot3 host side, port of c45b3/client.py. Works on raw bytes of the serial port.
 import { AUTOBAUD_CHAR, CMD, CrcError, encodeFrame, FrameDecoder, IDENTIFIER, MAX_DATA, OK_BIT } from "./protocol";
 
-/** raw byte access to the port */
-export interface ByteLink {
-  write(data: Uint8Array): Promise<void>;
-  /** bytes that arrived, waiting at most `timeoutMs` for the first one (empty = nothing came) */
-  read(timeoutMs: number): Promise<Uint8Array>;
-  /** drop what was received so far */
-  flush(): void;
-}
+import type { ByteLink } from "../transport/types";
+export type { ByteLink };
 
 // ATxmega256A3U of the Forge
 export const APP_SIZE = 0x40000;   // start of the boot section: the application ends here
@@ -174,3 +168,8 @@ export function imageContains(image: Uint8Array, text: string): boolean {
   }
   return false;
 }
+
+/** The port firmware holds the identities it can take as NUL-terminated model and PCB strings
+ * ("96ELN\0", "4.0\0"); an image for another model lacks them. */
+export const imageKnows = (image: Uint8Array, model: string, pcb: string) =>
+  !!model && !!pcb && imageContains(image, model + "\0") && imageContains(image, pcb + "\0");

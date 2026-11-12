@@ -1,4 +1,5 @@
 import type { Transport } from "../transport/types";
+import { SimTarget } from "../boot/sim";
 import { emptyState, type DeviceState } from "./model";
 
 /** A Forge 96ELN with a plausible tuning, to look at the interface without a device. */
@@ -54,8 +55,12 @@ export function demoState(): DeviceState {
 /** Accepts every write, knows no reads: the demo state is already complete. */
 export class DemoTransport implements Transport {
   name = "Demo";
+  /** a simulated bootloader target, so the firmware page can be tried without a device */
+  bytes = new SimTarget();
   private fn: (l: string) => void = () => {};
   async write(line: string) {
+    await this.bytes.write(new TextEncoder().encode(line));
+    if (/system\.boot/.test(line)) { this.bytes.started = false; return; }
     const m = /^(get|set)\.(\S+) ([^=;\s]+)/.exec(line);
     if (!m) return;
     let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
@@ -66,6 +71,7 @@ export class DemoTransport implements Transport {
     } else if (m[1] === "get" && m[3] === "system.temperature.celsius") out = " <.1 system.temperature.celsius=38.50";
     else if (m[1] === "get") {
       const fixed: Record<string, string> = {
+        "system.ping": '"pong"', "system.key.info": '"DEMO-96ELN-4.0-0000000000000000-CCBYNCSA-20261112-MDD"',
         "system.feature.attributes.hw": "[110,96,63,63,2173,2173]", "system.errors": "[[129,1],[3,2]]", "system.supply": "[3320,13800]",
         "i2c.1.scan": "[&H20,&H22,&H40,&H4E,&H68,&HA0,&HA8,&HE0]", "i2c.2.scan": "[&H68,&H6A,&H90,&HA0,&HA2]",
         "i2c.1.32.122": "&H04,&B00000100", "i2c.2.144.27": "&H01,&B00000001",

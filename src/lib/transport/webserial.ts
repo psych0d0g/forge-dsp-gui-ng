@@ -1,4 +1,4 @@
-import { LineSplitter, type Transport } from "./types";
+import { ByteQueue, LineSplitter, type Transport } from "./types";
 
 // Minimal typing of the Web Serial API (Chromium browsers).
 interface SerialPortLike {
@@ -20,18 +20,23 @@ export async function openWebSerial(baudRate = 38400): Promise<Transport> {
   const reader = port.readable!.getReader();
   const writer = port.writable!.getWriter();
   let open = true;
+  const queue = new ByteQueue();
   (async () => {
     const dec = new TextDecoder();
     while (open) {
       const { value, done } = await reader.read().catch(() => ({ value: undefined, done: true }));
       if (done) break;
-      if (value) split.push(dec.decode(value, { stream: true }));
+      if (value) {
+        queue.push(value);
+        split.push(dec.decode(value, { stream: true }));
+      }
     }
   })();
   return {
     name: "USB",
     write: (line) => writer.write(new TextEncoder().encode(line)),
     onLine: (fn) => listeners.push(fn),
+    bytes: { write: (data) => writer.write(data), read: (ms) => queue.read(ms), flush: () => queue.flush() },
     close: async () => {
       open = false;
       await reader.cancel().catch(() => undefined);

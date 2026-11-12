@@ -1,6 +1,6 @@
 // Application state (Svelte 5 runes): connection, device model, log, navigation.
 import { ForgeClient, type Answer, type Value } from "./protocol";
-import type { Transport } from "./transport/types";
+import type { ByteLink, Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
 import { openWebSocket } from "./transport/websocket";
 import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress } from "./device";
@@ -20,6 +20,8 @@ export const app = $state({
   log: [] as { dir: "rx" | "tx"; text: string }[],
   /** registers with a write on its way */
   writing: 0,
+  /** the port is in use for something else (firmware update): no status reads */
+  exclusive: false,
 });
 
 let transport: Transport | null = null;
@@ -170,7 +172,7 @@ let tick = 0;
 
 async function poll() {
   const c = client;
-  if (!c || polling || app.status !== "online" || app.writing > 0) return;
+  if (!c || polling || app.status !== "online" || app.writing > 0 || app.exclusive) return;
   if (typeof document !== "undefined" && document.hidden) return;
   tick++;
   const regs: string[] = [];
@@ -233,4 +235,16 @@ export function setInName(n: number, name: string) {
   if (v) inNames[n] = v;
   else delete inNames[n];
   try { localStorage.setItem(namesKey(), JSON.stringify(inNames)); } catch { /* see above */ }
+}
+
+// --- firmware update ------------------------------------------------------------------------------
+/** access for lib/boot/update.ts: raw bytes and text lines of the same port; null without USB */
+export function updateAccess(): { link: ByteLink; sendLine(l: string): Promise<void>; ask(reg: string): Promise<string> } | null {
+  const t = transport, c = client;
+  if (!t?.bytes || !c) return null;
+  return {
+    link: t.bytes,
+    sendLine: (l) => t.write(l + "\r\n"),
+    ask: async (reg) => (await c.get(reg).catch(() => []))[0]?.raw ?? "",
+  };
 }

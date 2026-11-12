@@ -4,6 +4,41 @@ export interface Transport {
   write(line: string): Promise<void>;
   onLine(fn: (line: string) => void): void;
   close(): Promise<void>;
+  /** raw bytes of the same port, for the bootloader (USB only) */
+  bytes?: ByteLink;
+}
+
+/** raw byte access (see lib/boot/client.ts) */
+export interface ByteLink {
+  write(data: Uint8Array): Promise<void>;
+  read(timeoutMs: number): Promise<Uint8Array>;
+  flush(): void;
+}
+
+/** received bytes waiting for a reader; bounded, so text traffic does not pile up unread */
+export class ByteQueue {
+  private chunks: Uint8Array[] = [];
+  private size = 0;
+  private wake: (() => void) | null = null;
+  push(data: Uint8Array) {
+    this.chunks.push(data);
+    this.size += data.length;
+    while (this.size > 65536 && this.chunks.length > 1) this.size -= this.chunks.shift()!.length;
+    this.wake?.();
+  }
+  async read(timeoutMs: number): Promise<Uint8Array> {
+    if (!this.size)
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => { this.wake = null; resolve(); }, timeoutMs);
+        this.wake = () => { clearTimeout(t); this.wake = null; resolve(); };
+      });
+    const out = new Uint8Array(this.size);
+    let o = 0;
+    for (const c of this.chunks) { out.set(c, o); o += c.length; }
+    this.flush();
+    return out;
+  }
+  flush() { this.chunks = []; this.size = 0; }
 }
 
 /** Splits a byte/text stream into lines at LF, as the firmware does (bytematch = 10). */
