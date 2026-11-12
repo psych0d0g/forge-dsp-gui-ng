@@ -45,6 +45,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
   { reg: "modc.version.attributes" },
   { reg: "modc.*" },
   { reg: "mixer.*", slow: true },
+  { reg: "system.biquads", port: true },
   { reg: "biquad.*", slow: true },
 ];
 

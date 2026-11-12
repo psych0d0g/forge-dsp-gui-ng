@@ -1,12 +1,13 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
-  import { app, outName, write } from "../lib/app.svelte";
-  import { isPort, limitsOf, sumsActiveAnywhere, type Biquad } from "../lib/device";
+  import { app, outName, setPoolLengths, write } from "../lib/app.svelte";
+  import { isPort, limitsOf, poolOf, proposeGrow, sumsActiveAnywhere, type Biquad } from "../lib/device";
   import { isActive, typeInfo, TYPES, viewRange } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
   import Knob from "../components/Knob.svelte";
+  import PoolPanel from "../components/PoolPanel.svelte";
 
   const d = $derived(app.device);
   const lim = $derived(limitsOf(d));
@@ -27,7 +28,8 @@
   let linked = $state(false);
   // other channels laid over the curve, each in its own colour (readable on dark and light)
   const COLORS = ["#f59e0b", "#10b981", "#ec4899", "#a78bfa", "#22d3ee", "#ef4444", "#84cc16", "#94a3b8", "#fb7185", "#38bdf8"];
-  const colorOf = (c: number) => COLORS[Math.max(0, channels.indexOf(c)) % COLORS.length];
+  // the sums keep their own colours while they are hidden (All Over off), e.g. in the biquad distribution
+  const colorOf = (c: number) => (channels.includes(c) ? COLORS[channels.indexOf(c) % COLORS.length] : COLORS[(8 + c) % COLORS.length]);
   // ?over=3,5 starts with these channels overlaid
   let over = $state<number[]>((new URLSearchParams(location.search).get("over") ?? "").split(",").map(Number).filter((n) => n > 0));
   const overlays = $derived(over.filter((c) => c !== ch && d.biquads[c]).map((c) => ({ name: chName(c), color: colorOf(c), filters: Object.values(d.biquads[c]) })));
@@ -103,7 +105,31 @@
     if (!t?.gain) patch.gain = 0;
     update(n, patch);
   }
-  function add(kind: "band" | "filter") {
+  // biquad pools (port firmware, forge-dsp-firmware#47): a full channel can get more places
+  let poolBusy = $state("");
+  const GROW = 8;
+  const canGrow = $derived(!!poolOf(d, ch));
+  async function grow(): Promise<boolean> {
+    const g = proposeGrow(d, ch, GROW);
+    const k = poolOf(d, ch)!;
+    if (!g?.got) {
+      alert(`Im Vorrat von Kern ${k.core} ist nichts mehr frei, und die anderen Kanäle nutzen ihre Plätze bis zum Ende.\n\n` +
+        "Unter „Biquad-Verteilung“ lassen sich Plätze von Hand verschieben.");
+      return false;
+    }
+    const from = k.channels.map((c, i) => ({ c, diff: c.len - g.lengths[i] })).filter((x) => x.diff > 0 && x.c.ch !== ch)
+      .map((x) => `${x.diff} von ${chName(x.c.ch)}`);
+    if (!confirm(`Alle ${slots.length} Plätze von ${chName(ch)} sind belegt. ${g.got} weitere holen` +
+      (from.length ? ` (${from.join(", ")}, dort ungenutzt)` : " (aus dem freien Vorrat)") +
+      "?\n\nDer Forge startet dafür neu, rund 40 s ohne Ton. Kein belegtes Band geht verloren.")) return false;
+    poolBusy = "…";
+    const err = await setPoolLengths(g.core, g.lengths, (t) => (poolBusy = t));
+    poolBusy = "";
+    if (err) { alert(err); return false; }
+    return true;
+  }
+  async function add(kind: "band" | "filter") {
+    if (!slots.some((s) => s.bq.type === 0) && !(canGrow && (await grow()))) return;
     const slot = slots.find((s) => s.bq.type === 0);
     if (!slot) return;
     update(slot.n, kind === "band" ? { type: EQ_Q, f: 1000, gain: 0, q: 1414, b: 707, flags: 128 }
@@ -224,7 +250,7 @@
         </div>
       </div>
     {/each}
-    <button class="add" onclick={() => add("filter")} disabled={!free} title="Filter hinzufügen"><span class="plus">+</span><span>Filter</span></button>
+    <button class="add" onclick={() => add("filter")} disabled={(!free && !canGrow) || !!poolBusy} title={free ? "Filter hinzufügen" : "Filter hinzufügen (holt weitere Plätze, Neustart)"}><span class="plus">+</span><span>Filter</span></button>
   </div>
 </section>
 
@@ -293,9 +319,15 @@
         </div>
       </div>
     {/each}
-    <button class="add" onclick={() => add("band")} disabled={!free} title="EQ-Band hinzufügen"><span class="plus">+</span><span>Band</span></button>
+    <button class="add" onclick={() => add("band")} disabled={(!free && !canGrow) || !!poolBusy} title={free ? "EQ-Band hinzufügen" : "EQ-Band hinzufügen (holt weitere Plätze, Neustart)"}><span class="plus">+</span><span>Band</span></button>
   </div>
 </section>
+
+{#if d.pools?.length}
+  <PoolPanel {colorOf} current={ch} bind:busy={poolBusy} />
+{:else if poolBusy}
+  <p class="muted">{poolBusy}</p>
+{/if}
 
 <style>
   .head { margin-bottom: 1rem; }

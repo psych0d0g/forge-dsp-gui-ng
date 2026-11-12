@@ -11,6 +11,9 @@ export interface GainScale {
   minDb: number;
 }
 
+/** one channel of a biquad pool: system.biquads = [[channel, core, biquads, minimum, pool size], …] */
+export interface PoolChannel { ch: number; core: number; len: number; min: number; size: number }
+
 /** `biquad.CH.N` = [type, f, gain (0.1 dB), q (1/1000), b, flags] */
 export interface Biquad {
   type: number;
@@ -77,6 +80,8 @@ export interface DeviceState {
   errors: number[][];
   /** system.limits.<name> as the device reports them (port firmware, forge-dsp-firmware#54) */
   limits: Record<string, number[]>;
+  /** biquad pools per DSP core (system.biquads, forge-dsp-firmware#47); null = fixed counts */
+  pools: PoolChannel[] | null;
   /** names of the inputs in the device (system.channel.in.N, #55); null = the firmware has none */
   inputNames: Record<number, string> | null;
   /** port extensions, null when the firmware does not have them */
@@ -107,6 +112,7 @@ export function emptyState(): DeviceState {
     preset: { loaded: null, select: null },
     channelNames: {},
     limits: {},
+    pools: null,
     inputNames: null,
     errors: [],
     clickless: null,
@@ -194,6 +200,13 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
           if (p[2] === "name" && p.length === 4) { s.channelNames[n(3)] = String(v); return true; }
           if (p[2] === "in" && p.length === 4) { (s.inputNames ??= {})[n(3)] = String(v); return true; }
           return false;
+        case "biquads":
+          if (p.length !== 2 || !Array.isArray(v)) return false;
+          s.pools = v.filter(Array.isArray).map((e) => {
+            const [ch, core, len, min, size] = (e as Value[]).map(Number);
+            return { ch, core, len, min, size: size || 0 };
+          });
+          return true;
         case "limits":
           if (p.length === 3) { s.limits[p[2]] = nums(v); return true; }
           return p.length === 2;

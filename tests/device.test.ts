@@ -304,3 +304,41 @@ describe("input delays", () => {
     expect(inputDelayGroup(none)).toBeNull();
   });
 });
+
+import { checkLengths, lostBands, poolCores, proposeGrow } from "../src/lib/device";
+
+describe("biquad pools (forge-dsp-firmware#47)", () => {
+  const dev = () => {
+    const s = emptyState();
+    applyAnswer(s, parseAnswer(" <.1 system.biquads=[[35,1,72,1,172],[36,1,72,1,172],[1,3,60,3,196],[2,3,60,3,196],[3,3,38,1,196],[4,3,38,3,196]]")!);
+    const off = { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 };
+    for (const [ch, n] of [[1, 60], [2, 60], [3, 38], [4, 38], [35, 72], [36, 72]]) {
+      s.biquads[ch] = {};
+      for (let i = 1; i <= n; i++) s.biquads[ch][i] = { ...off };
+    }
+    s.biquads[1][1] = { type: 1, f: 1000, gain: -30, q: 707, b: 0, flags: 128 };
+    s.biquads[2][50] = { type: 1, f: 2000, gain: -30, q: 707, b: 0, flags: 128 };
+    return s;
+  };
+  it("reads system.biquads", () => {
+    const k = poolCores(dev());
+    expect(k.map((x) => [x.core, x.size, x.channels.map((c) => c.len)])).toEqual([[1, 172, [72, 72]], [3, 196, [60, 60, 38, 38]]]);
+  });
+  it("grows from the free biquads first, then from unused bands at the end", () => {
+    const s = dev();
+    expect(proposeGrow(s, 35, 10)).toEqual({ core: 1, lengths: [82, 72], got: 10 });          // 28 free in core 1
+    const g = proposeGrow(s, 3, 100)!;
+    expect(g.got).toBe(100);
+    expect(g.lengths.reduce((a, b) => a + b, 0)).toBe(196);
+    expect(g.lengths[1]).toBeGreaterThanOrEqual(50);                                           // band 50 of output 2 stays
+    expect(lostBands(s, poolCores(s)[1], g.lengths)).toEqual([]);
+    expect(proposeGrow(s, 3, 500)!.got).toBe(196 - 38 - 3 - 50 - 3);                          // all unused, minimum 3 each
+  });
+  it("checks lengths and reports bands that would be dropped", () => {
+    const s = dev(), k = poolCores(s)[1];
+    expect(checkLengths(k, [60, 60, 38, 38])).toBe("");
+    expect(checkLengths(k, [2, 60, 38, 38])).toMatch(/mindestens 3/);
+    expect(checkLengths(k, [60, 60, 38, 39])).toMatch(/1 Biquads mehr/);
+    expect(lostBands(s, k, [60, 40, 58, 38])).toEqual([{ ch: 2, bands: [50] }]);
+  });
+});

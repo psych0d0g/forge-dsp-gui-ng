@@ -106,6 +106,53 @@ export async function writeOnce(reg: string, value: Value): Promise<string> {
   }
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * New biquad lengths for the channels of one DSP core (port firmware, forge-dsp-firmware#47).
+ * The device moves the stored bands, restarts and loads the new DSP program; it may restart a
+ * second time right after (forge-dsp-firmware#57). Waits until it has answered for 15 s in a row,
+ * then reads everything again. step() reports progress. Returns the error text or "".
+ */
+export async function setPoolLengths(core: number, lengths: number[], step: (text: string) => void): Promise<string> {
+  if (app.demo) {
+    const d = app.device;
+    const chans = (d.pools ?? []).filter((c) => c.core === core);
+    chans.forEach((c, i) => {
+      const bq = (d.biquads[c.ch] ??= {});
+      for (let n = c.len + 1; n <= lengths[i]; n++) bq[n] = { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 };
+      for (let n = lengths[i] + 1; n <= c.len; n++) delete bq[n];
+      c.len = lengths[i];
+    });
+    return "";
+  }
+  if (!client) return "nicht verbunden";
+  app.exclusive = true;
+  try {
+    step("Gerät verteilt die Biquads um …");
+    const err = await writeOnce(`system.biquads.${core}`, lengths);
+    if (err) return err;
+    step("Gerät startet neu und lädt das neue DSP-Programm …");
+    await sleep(4000);
+    const t0 = Date.now();
+    for (let quiet = 0; quiet < 15000;) {
+      if (Date.now() - t0 > 150000) return "Das Gerät meldet sich nicht zurück.";
+      let ok = false;
+      try {
+        ok = (await client.get("system.firmware")).some((a) => a.kind === "get");
+      } catch { /* still restarting */ }
+      if (ok) quiet += 2500;
+      else if (quiet) { quiet = 0; step("Gerät startet ein zweites Mal …"); }
+      await sleep(2500);
+    }
+    step("Lese den neuen Stand …");
+    await reload();
+    return "";
+  } finally {
+    app.exclusive = false;
+  }
+}
+
 /** raw console line */
 export async function sendRaw(line: string) {
   if (!client) return;
