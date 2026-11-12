@@ -23,10 +23,14 @@
     if (Number.isNaN(v) || v < 0) return null;
     return unit === "ms" ? msToSamples(v, rate) : unit === "cm" ? cmToSamples(v, rate) : Math.round(v);
   };
-  // The memory allows 60 ms, a car needs a few: the faders cover 15 ms (or the largest value in
-  // use), larger values can be typed.
+  // Three ranges for the faders, as the original GUI: 480, 960 and 1920 samples (5, 10 and 20 ms
+  // at 96 kHz). The smallest that holds the largest value in use is picked at the start; values
+  // beyond the range can still be typed (the memory allows about 60 ms).
+  const RANGES = [480, 960, 1920];
   const all = $derived([...d.delay.out, ...(inGroup ? d.delay.in.slice(0, inGroup.channels.length) : [])]);
-  const span = $derived(Math.min(5840, Math.max(msToSamples(15, rate), ...all)));
+  let range = $state<number | null>(null);
+  const span = $derived(range ?? RANGES.find((r) => r >= Math.max(0, ...all)) ?? RANGES[RANGES.length - 1]);
+  const rangeLabel = (r: number) => (unit === "ms" ? `${+samplesToMs(r, rate).toFixed(1)} ms` : unit === "cm" ? `${Math.round(samplesToCm(r, rate))} cm` : `${r} S`);
 
   type Side = "in" | "out";
   const list = (side: Side) => (side === "in" ? d.delay.in : d.delay.out);
@@ -60,10 +64,10 @@
 
 {#snippet strip(side: Side, ch: number, g: DelayGroup, nr: string, name: string, shown: string = name)}
   {@const v = list(side)[ch - 1] ?? 0}
-  <div class="strip" class:zero={!v}>
+  <div class="strip" class:zero={!v} class:beyond={v > span} title={v > span ? "Wert liegt über dem Regelbereich" : undefined}>
     <span class="chn num">{nr}</span>
     <span class="sname" title={name}>{shown || "\u00a0"}</span>
-    <VFader frac={v / span} label="Laufzeit {name}" valuetext="{show(v)} {U}"
+    <VFader frac={Math.min(1, v / span)} label="Laufzeit {name}" valuetext="{show(v)} {U}"
       onfrac={(f) => set(side, ch, f * span, g)} onstep={(dir) => set(side, ch, v + dir * (unit === "samples" ? 1 : Math.max(1, Math.round(rate / 10000))), g)} />
     <label class="val num"><input value={show(v)} onchange={(e) => typed(e, side, ch, g)} aria-label="Laufzeit {name} in {U}" /><span>{U}</span></label>
     <span class="alt num">{unit === "samples" ? `${samplesToMs(v, rate).toFixed(2)} ms` : other(v)}</span>
@@ -88,6 +92,11 @@
     <h2>Laufzeit</h2>
     <p class="muted">Verzögerung je Eingang und je Ausgang. An den Ausgängen gleicht sie die Wege der Lautsprecher zum Hörplatz aus, an
       den Eingängen den Versatz zwischen Quellen.</p>
+  </div>
+  <div class="units" role="group" aria-label="Regelbereich der Fader">
+    {#each RANGES as r}
+      <button class:on={span === r} aria-pressed={span === r} title="Regelbereich der Fader" onclick={() => (range = r)}>{rangeLabel(r)}</button>
+    {/each}
   </div>
   <div class="units" role="group" aria-label="Einheit">
     {#each [["ms", "ms"], ["cm", "cm"], ["samples", "Samples"]] as [u, t]}
@@ -119,7 +128,7 @@
 </section>
 
 <div class="foot">
-  <p class="muted small">Fader ziehen oder Wert eintippen. Die Fader reichen bis {show(span)} {U}, größere Werte lassen sich eintippen.
+  <p class="muted small">Fader ziehen oder Wert eintippen. Der Regelbereich der Fader ist oben umschaltbar (wie in der bisherigen Forge-Software), größere Werte lassen sich eintippen.
     Unter jedem Ausgang: Abstand vom Hörplatz zum Lautsprecher in cm. Der entfernteste bekommt keine Verzögerung, alle anderen so viel, wie ihr
     Schall zu früh ankäme (343 m/s).</p>
   <div class="apply">
@@ -129,7 +138,8 @@
 </div>
 
 <style>
-  .head { margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .head { margin-bottom: 1rem; display: flex; align-items: flex-start; gap: .75rem; flex-wrap: wrap; }
+  .head > div:first-child { margin-right: auto; }
   .units { display: flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
   .units button { border: 0; border-radius: 0; background: none; padding: .35rem .8rem; color: var(--muted); }
   .units button.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); }
@@ -152,6 +162,7 @@
   .val input:focus { border-color: var(--accent); outline: none; background: var(--panel); }
   .zero .val input:not(:focus) { color: var(--faint); }
   .alt { font-size: .66rem; color: var(--faint); }
+  .beyond .val input { color: var(--warn); }
   .dist { display: flex; align-items: baseline; gap: .15rem; font-size: .66rem; color: var(--muted); margin-top: .35rem; padding-top: .4rem; border-top: 1px dashed var(--line-strong); }
   .dist input { width: 2.7rem; text-align: center; padding: .15rem .1rem; font-size: .82rem; }
   .want { font-size: .66rem; color: var(--accent); min-height: 1em; }
