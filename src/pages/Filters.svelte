@@ -4,14 +4,15 @@
   import { isActive, typeInfo, TYPES } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
+  import VFader from "../components/VFader.svelte";
 
   const d = $derived(app.device);
   const lim = $derived(limitsOf(d));
   const rate = $derived(d.identity.sampleRate || 96000);
   const port = $derived(isPort(d));
-  // channels as the firmware numbers them: outputs 1..n, 35/36 = the two buses of the mixer
-  const BUS: Record<number, string> = { 35: "Bus A", 36: "Bus B" };
-  const channels = $derived(Object.keys(d.biquads).map(Number).sort((a, b) => (a > 30 ? a - 100 : a) - (b > 30 ? b - 100 : b)));
+  // channels as the firmware numbers them: outputs 1..n, 35/36 = the two signal sums of the mixer
+  const BUS: Record<number, string> = { 35: "Summe A", 36: "Summe B" };
+  const channels = $derived(Object.keys(d.biquads).map(Number).sort((a, b) => a - b));  // outputs first, the sums (35/36) last
   const chName = (ch: number) => BUS[ch] ?? outName(ch);
   let ch = $state(0);
   $effect(() => {
@@ -57,6 +58,34 @@
     update(n, { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 });
     if (selected === n) selected = null;
   }
+  // The upright fader of a strip sets the gain; for types without gain (crossovers, all passes)
+  // it sets the frequency on a logarithmic scale.
+  const logFrac = (f: number) => (Math.log(clamp(f || lim.freq[0], lim.freq)) - Math.log(lim.freq[0])) / (Math.log(lim.freq[1]) - Math.log(lim.freq[0]));
+  const faderFrac = (bq: Biquad) => (typeInfo(bq.type)?.gain ? (bq.gain - lim.bqGain[0]) / (lim.bqGain[1] - lim.bqGain[0]) : logFrac(bq.f));
+  function faderSet(n: number, bq: Biquad, frac: number) {
+    if (typeInfo(bq.type)?.gain) update(n, { gain: Math.round(lim.bqGain[0] + frac * (lim.bqGain[1] - lim.bqGain[0])) });
+    else update(n, { f: Math.round(lim.freq[0] * Math.pow(lim.freq[1] / lim.freq[0], frac)) });
+  }
+  function faderStep(n: number, bq: Biquad, dir: number) {
+    if (typeInfo(bq.type)?.gain) update(n, { gain: clamp(bq.gain + dir * 5, lim.bqGain) });        // 0.5 dB
+    else update(n, { f: clamp(Math.round(bq.f * Math.pow(2, dir / 12)) || bq.f + dir, lim.freq) });   // 1/12 octave
+  }
+  const fmtF = (f: number) => (f >= 1000 ? `${+(f / 1000).toFixed(2)} kHz` : `${f} Hz`);
+  const fmtG = (g: number) => `${g > 0 ? "+" : g < 0 ? "−" : ""}${Math.abs(g / 10).toFixed(1)} dB`;
+
+  // Tab in a value field goes to the same field of the next filter (Shift+Tab: previous), so a
+  // row of frequencies or gains can be typed in one go. At the ends Tab leaves as usual.
+  function tabAcross(e: KeyboardEvent) {
+    if (e.key !== "Tab") return;
+    const el = e.currentTarget as HTMLInputElement;
+    const row = [...(el.closest(".strips")?.querySelectorAll<HTMLInputElement>(`input[data-k="${el.dataset.k}"]:not(:disabled)`) ?? [])];
+    const next = row[row.indexOf(el) + (e.shiftKey ? -1 : 1)];
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
+    next.select();
+  }
+
   function num(e: Event, n: number, key: "f" | "gain" | "q" | "b", scale: number, range: [number, number]) {
     const el = e.currentTarget as HTMLInputElement;
     const v = Number(el.value.replace(",", "."));
@@ -69,7 +98,7 @@
   <div>
     <h2>Filter & EQ</h2>
     <p class="muted">Weichen, Equalizer und Phasenfilter je Kanal. Punkte im Diagramm ziehen ändert Frequenz und Pegel, das
-      Mausrad auf einem Punkt die Güte.</p>
+      Mausrad auf einem Punkt die Güte. In den Wertefeldern springt Tab zum gleichen Feld des nächsten Filters.</p>
   </div>
 </header>
 
@@ -100,45 +129,49 @@
 <section class="panel list">
   <div class="listhead">
     <h3>Filter <span class="muted num">{used.length} von {slots.length}</span></h3>
-    <button onclick={add} disabled={used.length >= slots.length}>+ Filter</button>
   </div>
-  {#if !used.length}
-    <p class="muted">Dieser Kanal hat noch keine Filter.</p>
-  {/if}
-  {#each used as { n, bq } (n)}
-    {@const t = typeInfo(bq.type)}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="frow" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
-      <span class="nr num">{n}</span>
-      <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Filter ein/aus"
-        onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
-      <select value={bq.type} aria-label="Typ Filter {n}" onchange={(e) => setType(n, Number(e.currentTarget.value))}>
-        {#if !t}<option value={bq.type}>Typ {bq.type}</option>{/if}
-        {#each groups as g}
-          <optgroup label={g}>
-            {#each TYPES.filter((x) => x.group === g) as x}
-              <option value={x.type} disabled={x.port && !port}>{x.name}{x.port && !port ? " (nur Port-Firmware)" : ""}</option>
-            {/each}
-          </optgroup>
-        {/each}
-      </select>
-      <label class="f"><span>Frequenz</span><span class="in"><input class="num" value={bq.f} inputmode="numeric"
-        onchange={(e) => num(e, n, "f", 1, lim.freq)} /><i>Hz</i></span></label>
-      {#if t?.gain}
-        <label class="f"><span>Pegel</span><span class="in"><input class="num" value={bq.gain / 10} inputmode="decimal"
-          onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /><i>dB</i></span></label>
-      {/if}
-      {#if t?.q}
-        <label class="f"><span>Güte</span><span class="in"><input class="num" value={bq.q / 1000} inputmode="decimal"
-          onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} /><i>Q</i></span></label>
-      {/if}
-      {#if t?.b}
-        <label class="f"><span>{t.b === "Winkel (°)" ? "Winkel" : "Bandbreite"}</span><span class="in"><input class="num" value={bq.b} inputmode="numeric"
-          onchange={(e) => num(e, n, "b", 1, t.b === "Winkel (°)" ? [1, 359] : lim.bqB)} /><i>{t.b === "Winkel (°)" ? "°" : "Hz"}</i></span></label>
-      {/if}
-      <button class="ghost del" title="Filter entfernen" aria-label="Filter {n} entfernen" onclick={() => remove(n)}><Icon name="close" size={16} /></button>
-    </div>
-  {/each}
+  <div class="strips">
+    {#each used as { n, bq } (n)}
+      {@const t = typeInfo(bq.type)}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="strip" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
+        <div class="striphead">
+          <span class="nr num">{n}</span>
+          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Filter ein/aus"
+            onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
+          <button class="ghost del" title="Filter entfernen" aria-label="Filter {n} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
+        </div>
+        <select value={bq.type} aria-label="Typ Filter {n}" title={t?.name ?? ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
+          {#if !t}<option value={bq.type}>Typ {bq.type}</option>{/if}
+          {#each groups as g}
+            <optgroup label={g}>
+              {#each TYPES.filter((x) => x.group === g) as x}
+                <option value={x.type} disabled={x.port && !port}>{x.name}{x.port && !port ? " (nur Port-Firmware)" : ""}</option>
+              {/each}
+            </optgroup>
+          {/each}
+        </select>
+        <div class="fader">
+          <VFader frac={faderFrac(bq)} zero={t?.gain ? -lim.bqGain[0] / (lim.bqGain[1] - lim.bqGain[0]) : null}
+            label="{t?.gain ? 'Pegel' : 'Frequenz'} Filter {n}" valuetext={t?.gain ? fmtG(bq.gain) : fmtF(bq.f)}
+            onfrac={(f) => faderSet(n, bq, f)} onstep={(dir) => faderStep(n, bq, dir)} />
+          <span class="what">{t?.gain ? "Pegel" : "Frequenz"}</span>
+        </div>
+        <label class="f"><span>Frequenz</span><span class="in"><input class="num" data-k="f" onkeydown={tabAcross} value={bq.f} inputmode="numeric"
+          onchange={(e) => num(e, n, "f", 1, lim.freq)} /><i>Hz</i></span></label>
+        <label class="f" class:hidden={!t?.gain}><span>Pegel</span><span class="in"><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
+          disabled={!t?.gain} onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /><i>dB</i></span></label>
+        <label class="f" class:hidden={!t?.q}><span>Güte</span><span class="in"><input class="num" data-k="q" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal"
+          disabled={!t?.q} onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} /><i>Q</i></span></label>
+        <label class="f" class:hidden={!t?.b}><span>{t?.b === "Winkel (°)" ? "Winkel" : "Bandbreite"}</span><span class="in"><input class="num" data-k="b" onkeydown={tabAcross}
+          value={bq.b} inputmode="numeric" disabled={!t?.b}
+          onchange={(e) => num(e, n, "b", 1, t?.b === "Winkel (°)" ? [1, 359] : lim.bqB)} /><i>{t?.b === "Winkel (°)" ? "°" : "Hz"}</i></span></label>
+      </div>
+    {/each}
+    <button class="add" onclick={add} disabled={used.length >= slots.length} title="Filter hinzufügen">
+      <span class="plus">+</span><span>Filter</span>
+    </button>
+  </div>
 </section>
 
 <style>
@@ -153,19 +186,27 @@
   .plothead h3 { margin-right: auto; }
   .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; }
   .check input { accent-color: var(--accent); }
-  .list { margin-top: .75rem; padding: .8rem 1rem; display: grid; gap: .3rem; }
-  .listhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: .2rem; }
-  .frow { display: flex; align-items: flex-end; gap: .6rem; flex-wrap: wrap; padding: .45rem .5rem; border: 1px solid transparent; border-radius: 10px; }
-  .frow.sel { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-  .frow.off { opacity: .6; }
-  .nr { width: 1.6rem; height: 2rem; display: grid; place-items: center; color: var(--muted); }
-  .sw { width: 3rem; padding: .38rem 0; font-size: .8rem; color: var(--muted); }
+  .list { margin-top: .75rem; padding: .8rem 1rem; display: grid; gap: .5rem; min-width: 0; }
+  .listhead { display: flex; justify-content: space-between; align-items: center; }
+  /* upright filter strips side by side, scrolling sideways when there are many */
+  .strips { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .5rem; align-items: stretch; }
+  .strip { flex: none; width: 8.8rem; display: flex; flex-direction: column; gap: .45rem; padding: .5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+  .strip.sel { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--raised)); }
+  .strip.off > :not(.striphead) { opacity: .5; }
+  .striphead { display: flex; align-items: center; gap: .3rem; }
+  .nr { width: 1.4rem; color: var(--muted); font-weight: 650; }
+  .sw { padding: .15rem .5rem; font-size: .75rem; color: var(--muted); }
   .sw.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--accent); }
-  select { padding: .4rem .5rem; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--raised); min-width: 13rem; flex: 1 1 13rem; max-width: 19rem; }
+  .del { margin-left: auto; color: var(--muted); padding: .2rem; display: grid; }
+  select { width: 100%; padding: .3rem .35rem; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--panel); font-size: .8rem; text-overflow: ellipsis; }
   select option, select optgroup { background: var(--bg); }
-  .f { display: grid; gap: .1rem; font-size: .7rem; color: var(--muted); }
+  .fader { display: grid; justify-items: center; gap: .1rem; }
+  .what { font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .f { display: grid; gap: .05rem; font-size: .68rem; color: var(--muted); }
+  .f.hidden { visibility: hidden; }
   .in { display: flex; align-items: baseline; gap: .25rem; }
-  .in input { width: 5rem; text-align: right; font-size: .9rem; }
-  .in i { font-style: normal; font-size: .75rem; width: 1.2rem; }
-  .del { margin-left: auto; color: var(--muted); padding: .35rem .55rem; }
+  .in input { width: 100%; min-width: 0; text-align: right; font-size: .88rem; padding: .25rem .4rem; }
+  .in i { font-style: normal; font-size: .72rem; width: 1.1rem; flex: none; }
+  .add { flex: none; width: 4.6rem; display: grid; place-content: center; justify-items: center; gap: .2rem; border-style: dashed; color: var(--muted); }
+  .plus { font-size: 1.4rem; line-height: 1; }
 </style>

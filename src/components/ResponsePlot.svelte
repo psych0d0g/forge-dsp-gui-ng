@@ -10,7 +10,7 @@
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
   } = $props();
 
-  const W = 1000, H = 340, L = 44, R = 44, T = 12, B = 26;
+  const W = 1000, H = 270, L = 44, R = 44, T = 12, B = 26;
   const DB_MIN = -30, DB_MAX = 18;
   const lo = $derived(Math.max(10, freq[0])), hi = $derived(Math.min(rate / 2 - 1, freq[1]));
   const x = (f: number) => L + ((Math.log10(f) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (W - L - R);

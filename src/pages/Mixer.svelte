@@ -12,26 +12,26 @@
   });
   const grid = $derived(d.mixer.values[profile] ?? {});
   const sources = $derived(sourceNames(d));
-  const BUS = ["Bus A", "Bus B"];
+  const BUS = ["Summe A", "Summe B"];  // the two signal sums (biquad channels 35/36)
   const inputs = inputsLeftFirst(MIXER_INPUTS);  // left before right within each stereo input
   // sources in groups: analog inputs (as many as gain.in has, 6), digital (the rest), the buses
   const analog = $derived(Math.min(MIXER_INPUTS, d.gain.in.length || 6));
   const srcGroups = $derived([
     { label: "Analog", cols: inputs.filter((g) => g <= analog) },
     { label: "Digital", cols: inputs.filter((g) => g > analog) },
-    { label: "Bus", cols: MIXER_BUS_COLUMNS },
+    { label: "Signalsumme", cols: MIXER_BUS_COLUMNS },
   ]);
-  const groupStart = (g: number) => g === analog + 2 || g === MIXER_INPUTS + 1;  // first column of Digital / Bus
+  const groupStart = (g: number) => g === analog + 2 || g === MIXER_INPUTS + 1;  // first column of Digital / sums
 
-  // Destinations: the two buses, then the outputs; shown two at a time (a stereo pair).
+  // Destinations: the outputs, then the two signal sums; shown two at a time (a stereo pair).
   interface Dest { row: number; label: string; nr: string }
   const dests = $derived<Dest[]>([
-    ...MIXER_BUS_ROWS.map((row, i) => ({ row, label: BUS[i], nr: "" })),
     ...d.gain.out.map((_, i) => ({ row: mixerRowOfOutput(i + 1), label: outName(i + 1), nr: String(i + 1) })),
+    ...MIXER_BUS_ROWS.map((row, i) => ({ row, label: BUS[i], nr: "" })),  // the sums always come last
   ]);
   const groups = $derived(Array.from({ length: Math.ceil(dests.length / 2) }, (_, i) => dests.slice(2 * i, 2 * i + 2)));
-  let group = $state(1);  // first output pair
-  const groupLabel = (g: Dest[]) => (g[0].nr ? `Ausgang ${g.map((x) => x.nr).join(" / ")}` : "Bus A / B");
+  let group = $state(0);  // first output pair
+  const groupLabel = (g: Dest[]) => (g[0].nr ? `Ausgang ${g.map((x) => x.nr).join(" / ")}` : "Signalsumme A / B");
 
   // mixer.P.1.10 is the source select of the profile, not a mixer value
   const has = (c: number, g: number) => grid[c]?.[g] !== undefined && !(c === 1 && g === 10);
@@ -127,7 +127,8 @@
       </div>
     {/each}
     <p class="muted small">Regler ziehen oder Wert eintippen, 100 % = voller Pegel. Doppelklick schaltet zwischen 0 und 100.
-      Bus A und B sind zwei Vorstufen mit eigener Filterkette; ihr Ausgang lässt sich auf jeden Kanal mischen.</p>
+      Die Signalsummen A und B mischen Eingänge vorab zusammen und haben eine eigene Filterkette; ihr Ausgang lässt sich auf
+      jeden Kanal geben.</p>
   </section>
 </div>
 
