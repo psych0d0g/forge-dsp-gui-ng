@@ -28,3 +28,11 @@ function line(cmd: "get" | "set", reg: string, value: Value | undefined, o: Line
 
 export const getLine = (reg: string, o: LineOptions = {}) => line("get", reg, undefined, o);
 export const setLine = (reg: string, value: Value, o: LineOptions = {}) => line("set", reg, value, o);
+
+/** set with the value text as it is (a line of a tuning file: lists with hex fields, quoted names) */
+export function setLineRaw(reg: string, valueText: string, o: LineOptions = {}): string {
+  if (!/^[a-z0-9.*]+$/i.test(reg)) throw new Error(`invalid register: ${reg}`);
+  const body = `${reg}=${valueText}`;
+  if (/[\r\n;]/.test(body)) throw new Error("value must not contain CR, LF or ';'");
+  return `set.${o.target ?? 1} ${body}${o.checksum ? `;${checksumHex(body)}` : ""}\r\n`;
+}

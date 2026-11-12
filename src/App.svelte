@@ -13,6 +13,7 @@
   import Mixer from "./pages/Mixer.svelte";
   import Filters from "./pages/Filters.svelte";
   import Diagnose from "./pages/Diagnose.svelte";
+  import Presets from "./pages/Presets.svelte";
   import Planned from "./pages/Planned.svelte";
 
   const version = __APP_VERSION__;
@@ -28,14 +29,13 @@
       { id: "inputs", label: "Eingänge", ready: true }, { id: "mixer", label: "Mixer", ready: true },
       { id: "filters", label: "Filter & EQ", ready: true }, { id: "delay", label: "Laufzeit", ready: true },
       { id: "outputs", label: "Ausgänge", ready: true }] },
-    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
+    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets", ready: true }] },
     { group: "Werkzeuge", items: [
       { id: "diagnose", label: "Diagnose", ready: true }, { id: "firmware", label: "Firmware" },
       { id: "console", label: "Konsole", ready: true }] },
   ];
   const PLANNED: Partial<Record<PageId, { title: string; text: string; issue: number }>> = {
     modc: { title: "Steuerblöcke", issue: 7, text: "Lautstärke, Loudness, Eingangsumschaltung, Mono und weitere Blöcke mit ihren Ereignissen." },
-    presets: { title: "Presets", issue: 8, text: "Abstimmungen laden, speichern, kopieren und als Datei sichern." },
     firmware: { title: "Firmware", issue: 10, text: "Firmware-Update direkt aus dem Browser, mit Sicherung vorab." },
   };
 
@@ -149,6 +149,7 @@
     {:else if app.page === "mixer"}<Mixer />
     {:else if app.page === "filters"}<Filters />
     {:else if app.page === "diagnose"}<Diagnose />
+    {:else if app.page === "presets"}<Presets />
     {:else if app.page === "console"}<Console />
     {:else if PLANNED[app.page]}<Planned {...PLANNED[app.page]!} />
     {/if}

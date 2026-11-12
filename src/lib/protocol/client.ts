@@ -1,6 +1,6 @@
 import type { Transport } from "../transport/types";
 import { parseAnswer, type Answer } from "./answer";
-import { getLine, setLine, type LineOptions, type Value } from "./request";
+import { getLine, setLine, setLineRaw, type LineOptions, type Value } from "./request";
 
 /**
  * One request at a time, as the firmware handles one line after another. A request is done on
@@ -22,6 +22,7 @@ export class ForgeClient {
 
   get(reg: string, o?: LineOptions) { return this.request(getLine(reg, o), reg); }
   set(reg: string, v: Value, o?: LineOptions) { return this.request(setLine(reg, v, o), reg); }
+  setRaw(reg: string, valueText: string, o?: LineOptions) { return this.request(setLineRaw(reg, valueText, o), reg); }
   /** raw line from a console; resolves with the answers seen until quiet */
   send(line: string) { return this.request(line.endsWith("\n") ? line : line + "\r\n", "*"); }
 

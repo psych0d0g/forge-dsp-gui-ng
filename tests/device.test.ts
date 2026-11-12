@@ -170,3 +170,40 @@ describe("diagnostics", () => {
     expect(hardwareCheck([110, 96, 63, 43, 2173, 2173])!.ok).toBe(false);
   });
 });
+
+import { entriesToWrite, parseCfg, restorable, stateToEntries, toCfg } from "../src/lib/device";
+import { setLineRaw } from "../src/lib/protocol";
+
+describe("tuning file", () => {
+  it("round trip in the format of the original GUI", async () => {
+    const s = await readDevice(new ForgeClient(new Recorded(fixture("V40-96ELN")), 100, 10));
+    const entries = stateToEntries(s);
+    const cfg = toCfg(s.identity.model, entries, ["test"]);
+    expect(cfg.startsWith("; test\n[96ELN]\n")).toBe(true);
+    expect(cfg).toContain('FILE_v10 = "gain.out.2=199"');
+    expect(cfg).toContain('FILE_v10 = "biquad.1.1.calc=[1,1000,35,1414,0,128]"');
+    expect(cfg).toContain('FILE_v10 = "modc.9=[1,108,02D7280F,0,0,0,0,1E100000]"');
+    expect(cfg).toContain('FILE_v10 = "system.channel.name.1="Front L""');
+    expect(cfg).not.toMatch(/delay\.in\.[78]=/);
+    const back = parseCfg(cfg);
+    expect(back.model).toBe("96ELN");
+    expect(back.entries).toEqual(entries);
+    expect(entriesToWrite(back.entries, s)).toEqual([]);          // nothing differs from the device
+    expect(entries.every(([r]) => restorable(r))).toBe(true);
+  });
+  it("finds what differs, treats every bypass alike, position last", async () => {
+    const s = await readDevice(new ForgeClient(new Recorded(fixture("V40-96ELN")), 100, 10));
+    const file = parseCfg(`[96ELN]
+FILE_v10 = "mixer.position=2"
+FILE_v10 = "gain.out.2=150"
+FILE_v10 = "gain.out.1=223"
+FILE_v10 = "biquad.1.2=[0,500,0,707,0,0]"
+FILE_v10 = "biquad.3.1.calc=[3,80,0,707,0,128]"
+`).entries;
+    expect(entriesToWrite(file, s)).toEqual([["gain.out.2", "150"], ["biquad.3.1.calc", "[3,80,0,707,0,128]"], ["mixer.position", "2"]]);
+    expect(restorable("system.boot")).toBe(false);
+    expect(restorable("i2c.1.32.4")).toBe(false);
+    expect(setLineRaw("modc.9", "[1,108,02D7280F,0,0,0,0,1E100000]", { checksum: true }))
+      .toMatch(/^set\.1 modc\.9=\[1,108,02D7280F,0,0,0,0,1E100000\];[0-9A-F]{2}\r\n$/);
+  });
+});

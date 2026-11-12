@@ -114,6 +114,18 @@ export async function sendRaw(line: string) {
   }
 }
 
+/** one set with the value text of a tuning file; returns the error text or "" */
+export async function writeRaw(reg: string, valueText: string): Promise<string> {
+  if (!client) return "nicht verbunden";
+  try {
+    const r = await client.setRaw(reg, valueText, { checksum: true });
+    const bad = r.find((a) => a.kind === "error");
+    return bad ? bad.message ?? "Fehler" : "";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
 // One write per register at a time; while it is on its way only the newest value is kept
 // (a slider must not fill the 38400 Bd line).
 const pending = new Map<string, { busy: boolean; next?: Value }>();
