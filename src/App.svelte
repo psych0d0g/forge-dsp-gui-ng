@@ -12,6 +12,8 @@
   let device = $state<{ key?: string; firmware?: string; info?: string }>({});
   let log = $state<{ dir: "rx" | "tx"; text: string }[]>([]);
   let input = $state("get.1 system.ping");
+  const version = __APP_VERSION__;
+  const commit = __APP_COMMIT__;
 
   onMount(async () => {
     onBridge = await servedByBridge();
@@ -62,14 +64,23 @@
     <span class="badge ok">verbunden: {transport.name}</span>
     <button onclick={disconnect}>Trennen</button>
   {:else}
-    <button class="primary" onclick={() => connect("usb")} disabled={!webSerialAvailable()}
-      title={webSerialAvailable() ? "" : "Web Serial gibt es nur in Chromium-Browsern"}>USB verbinden</button>
+    {#if webSerialAvailable()}
+      <button class="primary" onclick={() => connect("usb")}>USB verbinden</button>
+    {/if}
     {#if onBridge}<button onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
   {/if}
 </header>
 
 <main>
   {#if error}<p class="err">{error}</p>{/if}
+  {#if !transport && !webSerialAvailable() && !onBridge}
+    <section class="hint">
+      <h2>Dieser Browser kann nicht per USB verbinden</h2>
+      <p>Die Verbindung zum Forge läuft über Web Serial. Das gibt es in <strong>Chrome</strong> und <strong>Edge</strong>
+        (Desktop), nicht in Firefox und Safari. Alternativ: ESP32-Brücke am RS485-Port, dann läuft die Oberfläche
+        in jedem Browser über WLAN.</p>
+    </section>
+  {/if}
 
   <section>
     <h2>Gerät</h2>
@@ -95,6 +106,8 @@
   </section>
 </main>
 
+<footer>Forge DSP GUI NG {version} ({commit})</footer>
+
 <style>
   header { display: flex; gap: .75rem; align-items: center; padding: .75rem 1rem; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
   h1 { font-size: 1.1rem; margin: 0 auto 0 0; }
@@ -111,4 +124,6 @@
   .badge.ok { color: var(--ok); }
   .err { color: var(--err); margin: 0; }
   .muted { color: var(--muted); margin: 0; }
+  .hint p { margin: 0; }
+  footer { max-width: 60rem; margin: 0 auto; padding: 0 1rem 1rem; color: var(--muted); font-size: .8rem; }
 </style>
