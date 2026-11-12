@@ -60,8 +60,8 @@ export function parseValue(text: string): Value {
     while (j < s.length && s[j] !== "," && s[j] !== "]") j++;
     const tok = s.slice(i, j).trim();
     i = j;
-    const n = Number(tok);
-    return tok !== "" && !Number.isNaN(n) ? n : tok;
+    // plain decimals only: hex fields such as "1E100000" (modc flags/sets) must stay text
+    return /^-?\d+(\.\d+)?$/.test(tok) ? Number(tok) : tok;
   }
   const v = one();
   if (i !== s.length) throw new Error(`trailing data at ${i}: ${s}`);
