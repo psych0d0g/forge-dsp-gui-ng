@@ -108,6 +108,14 @@ describe("applyAnswer", () => {
     expect(s.preset.loaded).toBe(2);
     expect(ap(" <.1 mixer.2.5.8=100")).toBe(true);
     expect(s.mixer.values[2][5][8]).toBe(100);
+    expect(ap(" <.1 system.temperature=325.20")).toBe(true);          // no unit = kelvin
+    expect(s.temperature).toBeCloseTo(52.05, 2);
+    expect(ap(" <.1 system.temperature.celsius=41.50")).toBe(true);
+    expect(s.temperature).toBe(41.5);
+    expect(ap(" <.1 system.temperature.fahrenheit=212.00")).toBe(true);
+    expect(s.temperature).toBeCloseTo(100, 6);
+    expect(ap(" <.1 system.temperature.celsius=nop")).toBe(true);
+    expect(s.temperature).toBeNull();
     expect(ap(" *.1 gain.out.1 ok")).toBe(false);
     expect(ap(" !.1 foo unknown command")).toBe(false);
     expect(ap(" <.1 something.else=1")).toBe(false);

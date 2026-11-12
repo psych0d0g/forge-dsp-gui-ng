@@ -36,7 +36,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
   { reg: "preset.select" },
   { reg: "system.channel.name.*" },
   { reg: "system.errors" },
-  { reg: "system.temperature" },
+  { reg: "system.temperature.celsius" },
   { reg: "biquad.clickless", port: true },
   { reg: "system.supply", port: true },
   { reg: "modc.version.attributes" },

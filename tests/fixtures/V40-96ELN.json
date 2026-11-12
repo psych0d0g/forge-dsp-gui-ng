@@ -108,8 +108,8 @@
 "get.1 system.errors": [
 "<.1 system.errors=[[128,2148],[65,536],[66,1]]"
 ],
-"get.1 system.temperature": [
-"<.1 system.temperature=0.00"
+"get.1 system.temperature.celsius": [
+"<.1 system.temperature.celsius=-273.15"
 ],
 "get.1 biquad.clickless": [
 "<.1 biquad.clickless=1"

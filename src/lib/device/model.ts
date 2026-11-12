@@ -76,6 +76,7 @@ export interface DeviceState {
   /** port extensions, null when the firmware does not have them */
   clickless: number | null;
   supply: Value | null;
+  /** MCU temperature in °C */
   temperature: number | null;
 }
 
@@ -186,9 +187,14 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
         case "supply":
           if (p.length === 2) { s.supply = v; return true; }
           return false;
-        case "temperature":
-          if (p.length === 2) { s.temperature = num(v); return true; }
-          return false;
+        case "temperature": {
+          // without a unit the firmware answers in kelvin (as the original); "nop" = no reading
+          const t = num(v);
+          const unit = p[2] ?? "kelvin";
+          if (p.length > 3 || !["kelvin", "celsius", "fahrenheit"].includes(unit)) return false;
+          s.temperature = t === null ? null : unit === "kelvin" ? t - 273.15 : unit === "fahrenheit" ? (t - 32) / 1.8 : t;
+          return true;
+        }
       }
       return false;
     case "gain": {
