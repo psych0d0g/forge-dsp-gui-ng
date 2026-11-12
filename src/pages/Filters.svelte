@@ -41,6 +41,8 @@
   const FILTER_TYPES = TYPES.filter((t) => t.type !== 0 && t.type !== EQ_Q && t.type !== EQ_BW);
   const GROUP_LABEL: Record<string, string> = { EQ: "Shelf, Notch, Bandpass" };
   const filterGroups = [...new Set(FILTER_TYPES.map((t) => t.group))];
+  // types the device reports (system.limits.types); without that: the port's own types need the port
+  const can = (t: { type: number; port?: boolean }) => (lim.types ? lim.types.includes(t.type) : !t.port || port);
 
   // Both lists line up by frequency. The order is only taken over when an interaction ends
   // (pointer released, field left, added, removed), so nothing moves away under the hand.
@@ -186,7 +188,7 @@
             {#each filterGroups as g}
               <optgroup label={GROUP_LABEL[g] ?? g}>
                 {#each FILTER_TYPES.filter((x) => x.group === g) as x}
-                  <option value={x.type} disabled={x.port && !port}>{x.name}{x.port && !port ? " (nur Port-Firmware)" : ""}</option>
+                  <option value={x.type} disabled={!can(x)}>{x.name}{can(x) ? "" : " (nicht in dieser Firmware)"}</option>
                 {/each}
               </optgroup>
             {/each}

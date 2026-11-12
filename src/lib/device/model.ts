@@ -75,6 +75,10 @@ export interface DeviceState {
   preset: { loaded: number | null; select: number | null };
   channelNames: Record<number, string>;
   errors: number[][];
+  /** system.limits.<name> as the device reports them (port firmware, forge-dsp-firmware#54) */
+  limits: Record<string, number[]>;
+  /** names of the inputs in the device (system.channel.in.N, #55); null = the firmware has none */
+  inputNames: Record<number, string> | null;
   /** port extensions, null when the firmware does not have them */
   clickless: number | null;
   supply: Value | null;
@@ -102,6 +106,8 @@ export function emptyState(): DeviceState {
     modcVersions: [],
     preset: { loaded: null, select: null },
     channelNames: {},
+    limits: {},
+    inputNames: null,
     errors: [],
     clickless: null,
     supply: null,
@@ -186,7 +192,11 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
           return p[2] === "panes" && p.length === 3;
         case "channel":
           if (p[2] === "name" && p.length === 4) { s.channelNames[n(3)] = String(v); return true; }
+          if (p[2] === "in" && p.length === 4) { (s.inputNames ??= {})[n(3)] = String(v); return true; }
           return false;
+        case "limits":
+          if (p.length === 3) { s.limits[p[2]] = nums(v); return true; }
+          return p.length === 2;
         case "errors":
           s.errors = Array.isArray(v) ? v.map((e) => nums(e)) : [];
           return true;
@@ -306,6 +316,13 @@ export interface DelayGroup {
 }
 
 export function delayGroups(s: DeviceState, l: Limits = limitsOf(s)): DelayGroup[] {
+  // from the device: [samples per DSP, DSP of output 1, …] (system.limits.out)
+  const map = s.limits.out;
+  if (map && map.length > 1) {
+    const by = new Map<number, number[]>();
+    map.slice(1, s.delay.out.length + 1).forEach((dsp, i) => by.set(dsp, [...(by.get(dsp) ?? []), i + 1]));
+    return [...by.values()].sort((a, b) => a[0] - b[0]).map((channels) => ({ channels, budget: map[0] }));
+  }
   const groups: DelayGroup[] = [];
   for (let c = 1; c <= s.delay.out.length; c += l.delayPoolChannels)
     groups.push({ channels: Array.from({ length: Math.min(l.delayPoolChannels, s.delay.out.length - c + 1) }, (_, i) => c + i),
@@ -323,6 +340,8 @@ export function delayMax(s: DeviceState, group: DelayGroup, ch: number, list: nu
 /** Input delays: the analog inputs (as many as have a level, the firmware lists more) share the
  * delay memory of DSP 1. Empty on models without input delay. */
 export function inputDelayGroup(s: DeviceState, l: Limits = limitsOf(s)): DelayGroup | null {
+  const map = s.limits.in;
+  if (map) return map.length > 1 ? { channels: map.slice(1).map((_, i) => i + 1), budget: map[0] } : null;  // [] = no input delays
   const n = Math.min(s.delay.in.length, s.gain.in.length);
   return n ? { channels: Array.from({ length: n }, (_, i) => i + 1), budget: l.delayPool } : null;
 }

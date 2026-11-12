@@ -195,12 +195,13 @@ async function poll() {
 if (typeof window !== "undefined") setInterval(poll, VU_MS);
 
 // --- channel names --------------------------------------------------------------------------------
-// Outputs: in the device (system.channel.name.N). Inputs: the firmware has no place for them yet
-// (forge-dsp-firmware#55), so they live in this browser, per device serial. Default: the number
-// of the stereo input with its side.
+// Outputs: in the device (system.channel.name.N). Inputs: in the device as well when the firmware
+// stores them (port: system.channel.in.N, forge-dsp-firmware#55); with the original firmware in
+// this browser, per device serial. Default: the number of the stereo input with its side.
 const inNames = $state<Record<number, string>>({});
 const serialOf = () => app.device.identity.keyInfo.split("-")[3] || "unknown";
 const namesKey = () => `forge-in-names:${serialOf()}`;
+const deviceHasInNames = () => app.device.inputNames !== null;
 
 export function loadInNames() {
   for (const k of Object.keys(inNames)) delete inNames[Number(k)];
@@ -209,7 +210,7 @@ export function loadInNames() {
   } catch { /* no storage: names last for this session */ }
 }
 
-/** quotes, ';' and line breaks cannot be sent; the device keeps 16 characters */
+/** quotes, ';' and line breaks cannot be sent; the device keeps 16 bytes */
 export function cleanName(t: string): string {
   let v = t.replace(/["; \r\n]+/g, " ").trim();
   while (new TextEncoder().encode(v).length > 16) v = v.slice(0, -1);  // 16 bytes, umlauts count twice
@@ -218,11 +219,11 @@ export function cleanName(t: string): string {
 
 export const outName = (ch: number) => app.device.channelNames[ch] || `Ausgang ${ch}`;
 export const inDefault = (n: number) => inputDefaultName(n, app.device.gain.in.length || 6);
-export const inName = (n: number) => inNames[n] || inDefault(n);
+export const inNameRaw = (n: number) => (deviceHasInNames() ? app.device.inputNames![n] ?? "" : inNames[n] ?? "");
+export const inName = (n: number) => inNameRaw(n) || inDefault(n);
 /** short caption where the group already says "Analog"/"Digital": "2 L", "R"; a given name as it is */
-export const inShort = (n: number) => inNames[n] || inDefault(n).replace(/^Eingang |^Digital /, "");
+export const inShort = (n: number) => inNameRaw(n) || inDefault(n).replace(/^Eingang |^Digital /, "");
 export const outNameRaw = (ch: number) => app.device.channelNames[ch] ?? "";
-export const inNameRaw = (n: number) => inNames[n] ?? "";
 
 export function setOutName(ch: number, name: string) {
   const v = cleanName(name);
@@ -232,6 +233,11 @@ export function setOutName(ch: number, name: string) {
 
 export function setInName(n: number, name: string) {
   const v = cleanName(name);
+  if (deviceHasInNames()) {
+    app.device.inputNames![n] = v;
+    write(`system.channel.in.${n}`, v);
+    return;
+  }
   if (v) inNames[n] = v;
   else delete inNames[n];
   try { localStorage.setItem(namesKey(), JSON.stringify(inNames)); } catch { /* see above */ }

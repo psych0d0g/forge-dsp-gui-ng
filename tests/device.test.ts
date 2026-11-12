@@ -3,7 +3,7 @@ import v30 from "./fixtures/V30-96LN.json";
 import { describe, expect, it } from "vitest";
 import { ForgeClient, parseAnswer, parseValue } from "../src/lib/protocol";
 import type { Transport } from "../src/lib/transport/types";
-import { alignFromDistances, applyAnswer, bytesHex, cmToSamples, dbToRaw, delayGroups, delayMax, emptyState, exportState,
+import { alignFromDistances, applyAnswer, inputDelayGroup, limitsOf, bytesHex, cmToSamples, dbToRaw, delayGroups, delayMax, emptyState, exportState,
   hexBytes, isPort, modcTypeVersion, parseKeyInfo, rawToDb, readDevice, samplesToCm, samplesToMs } from "../src/lib/device";
 
 /** answers recorded from the firmware's own command interpreter (tests/fixtures/make_fixture.py) */
@@ -76,6 +76,12 @@ describe("readDevice", () => {
     expect(modcTypeVersion(s, 0x6c)).toBe(20);              // loudness: port extension
     expect(modcTypeVersion(s, 0x6d)).toBe(20);              // analog mixer
     expect(s.channelNames[1]).toBe("Front L");
+    expect(s.inputNames?.[7]).toBe("TV");                              // system.channel.in.N (#55)
+    expect(s.limits.out).toEqual([5840, 3, 3, 3, 3, 2, 2, 2, 2]);      // system.limits (#54)
+    expect(delayGroups(s).map((g) => g.channels)).toEqual([[1, 2, 3, 4], [5, 6, 7, 8]]);
+    expect(inputDelayGroup(s)?.channels).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(limitsOf(s).bqGain).toEqual([-120, 60]);
+    expect(limitsOf(s).types).toHaveLength(23);
     expect(s.clickless).toBe(1);
     expect(s.preset.loaded).toBe(0);
     expect(progress[0]).toBe(0);
@@ -87,17 +93,21 @@ describe("readDevice", () => {
   it("reads a V30-96LN", async () => {
     const s = await readDevice(new ForgeClient(new Recorded(fixture("V30-96LN")), 100, 10));
     expect(s.identity).toMatchObject({ model: "96LN", pcb: "3.0", presets: 8 });
+    expect(inputDelayGroup(s)).toBeNull();                              // the 96LN has no input delays
+    expect(delayGroups(s).map((g) => g.channels)).toEqual([[1, 2, 3, 4], [5, 6, 7, 8]]);
     expect(Object.keys(s.biquads).length).toBeGreaterThan(0);
   });
 
   it("original firmware: port registers are not asked after the first refusal", async () => {
-    const portOnly = /system\.firmware\.port|key\.info\.list|mixer\.in|biquad\.clickless|system\.supply/;
+    const portOnly = /system\.firmware\.port|key\.info\.list|mixer\.in|biquad\.clickless|system\.supply|system\.limits|system\.channel\.in|system\.vu/;
     const t = new Recorded(fixture("V40-96ELN"), (r) => portOnly.test(r));
     const s = await readDevice(new ForgeClient(t, 100, 10));
     expect(s.identity.port).toBeNull();
     expect(isPort(s)).toBe(false);
     expect(s.clickless).toBeNull();
     expect(t.sent.filter((r) => portOnly.test(r))).toEqual(["get.1 system.firmware.port"]);
+    expect(s.inputNames).toBeNull();                                     // names stay in the browser then
+    expect(limitsOf(s).bqGain).toEqual([-120, 60]);                      // BASCOM defaults
     expect(s.gain.out[0]).toBe(223);
   });
 });
@@ -281,7 +291,6 @@ describe("MODC dialog fields", () => {
   });
 });
 
-import { inputDelayGroup } from "../src/lib/device";
 
 describe("input delays", () => {
   it("the analog inputs share one pool; models without input delay have none", async () => {

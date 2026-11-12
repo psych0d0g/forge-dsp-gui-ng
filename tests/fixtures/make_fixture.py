@@ -17,14 +17,14 @@ SETS = [f"set.1 delay.{n}=0" for n in range(1, 9)] + ["set.1 mixer.position=1", 
         "set.1 mute.out.3=1", "set.1 phase.out.4=1", "set.1 delay.2=48", "set.1 mixer.1.3.2=100",
         "set.1 mixer.1.4.1=80", "set.1 biquad.1.1.calc=[1,1000,35,1414,0,128]",
         "set.1 biquad.2.3.calc=[22,80,0,707,45,128]", "set.1 modc.9=[1,108,02D7280F,0,0,0,0,1E100000]",
-        'set.1 system.channel.name.1="Front L"', "set.1 biquad.clickless=1"]
+        'set.1 system.channel.name.1="Front L"', 'set.1 system.channel.in.7="TV"', "set.1 biquad.clickless=1"]
 GETS = ["system.key.info", "system.firmware", "system.firmware.port", "system.info", "system.key.info.list",
-        "system.feature.attributes", "system.feature.attributes.fr", "system.feature.attributes.hw",
+        "system.feature.attributes", "system.limits", "system.limits.biquad", "system.limits.types", "system.limits.out", "system.limits.in", "system.limits.names", "system.feature.attributes.fr", "system.feature.attributes.hw",
         "system.feature.attributes.oa", "system.feature.attributes.ob", "system.gui.panes", "system.gui.panes.in",
         "system.gui.panes.bq", "system.gui.panes.ou", "system.gui.panes.sy", "gain.out.scale", "gain.in.scale",
         "gain.spdif.scale", "mixer.scale", "gain.out", "gain.in", "gain.spdif", "mute.out", "phase.out", "delay",
         "delay.in", "mixer.position", "mixer.in", "mixer.in.max", "preset.loaded", "preset.select",
-        "system.channel.name.*", "system.errors", "system.temperature.celsius", "biquad.clickless", "system.supply",
+        "system.channel.name.*", "system.channel.in.*", "system.errors", "system.temperature.celsius", "biquad.clickless", "system.supply",
         "modc.version.attributes", "modc.version.attributes.aa", "modc.version.attributes.ab",
         "modc.version.attributes.ac", "modc.version.attributes.ad", "modc.*", "mixer.*", "biquad.*"]
 

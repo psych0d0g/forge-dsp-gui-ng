@@ -17,6 +17,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
   { reg: "system.info" },
   { reg: "system.key.info.list", port: true },
   { reg: "system.feature.attributes" },
+  { reg: "system.limits", port: true },
   { reg: "system.gui.panes" },
   { reg: "gain.out.scale" },
   { reg: "gain.in.scale" },
@@ -35,6 +36,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
   { reg: "preset.loaded" },
   { reg: "preset.select" },
   { reg: "system.channel.name.*" },
+  { reg: "system.channel.in.*", port: true },
   { reg: "system.errors" },
   { reg: "system.temperature.celsius" },
   { reg: "biquad.clickless", port: true },
@@ -47,7 +49,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
 ];
 
 /** lists whose entries are read one by one: system.feature.attributes=["fr","hw"] -> ….fr, ….hw */
-const SUBLISTS = ["system.feature.attributes", "system.gui.panes", "modc.version.attributes"];
+const SUBLISTS = ["system.feature.attributes", "system.gui.panes", "modc.version.attributes", "system.limits"];
 
 /**
  * Reads the complete state of one device. The protocol is slow (38400 Bd, the mixer and biquad

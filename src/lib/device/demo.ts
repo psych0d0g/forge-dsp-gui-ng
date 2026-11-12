@@ -40,6 +40,9 @@ export function demoState(): DeviceState {
   for (const ch of [7, 8]) { s.biquads[ch][1] = on(13, 28, 0, 900); s.biquads[ch][2] = on(3, 70); s.biquads[ch][3] = on(3, 70); s.biquads[ch][4] = on(1, 45, 30, 2500); s.biquads[ch][5] = on(22, 70, 0, 707, 60); }
   s.identity.modcBlocks = 32;
   s.modcVersions = Array(64).fill(20);
+  s.limits = { biquad: [10, 22000, -120, 60, 1, 10000, 0, 22000], types: Array.from({ length: 23 }, (_, i) => i),
+    out: [5840, 3, 3, 3, 3, 2, 2, 2, 2], in: [5840, 1, 1, 1, 1, 1, 1], names: [16, 16] };
+  s.inputNames = { 1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "PC", 8: "PC" };
   const blk = (enable: number, type: number, flags: number[], events: number[], sets: number[]) => ({ enable, type, flags, events, sets });
   s.modc = { 1: blk(1, 86, [0, 0, 0, 0], [0, 0, 0, 0], [255, 0, 127, 0]), 2: blk(1, 16, [255, 0, 0, 0], [58, 59, 0, 0], [255, 0, 0, 0]),
     3: blk(1, 108, [15, 215, 40, 15], [98, 0, 0, 0], [100, 0, 16, 39]), 4: blk(0, 106, [8, 0, 0, 0], [62, 0, 0, 0], [4, 0, 0, 0]),
