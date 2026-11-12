@@ -9,7 +9,7 @@ Neue Bedienoberfläche für **Forge DSP** und **ETON CORE D8** als Nachfolger de
 
 Die Firmware des Forge (Original BASCOM 1.11.6000 oder der C-Port [forge-dsp-firmware](https://github.com/psych0d0g/forge-dsp-firmware)) bleibt unverändert, die App nutzt das Textprotokoll.
 
-**Stand:** Läuft unter https://psych0d0g.github.io/forge-dsp-gui-ng/ (zum Ansehen ohne Gerät: `?demo`). Fertig: App-Rahmen (Navigation nach Signalweg, hell/dunkel, Handy), Gerätemodell mit vollständigem Einlesen, Übersicht, Eingänge, Ausgänge (Pegel, Mute, Polarität), Konsole. In Arbeit: Mixer, Filter & EQ, Laufzeit, Steuerblöcke, Presets, Diagnose, Firmware-Update (siehe Issues).
+**Stand:** Läuft unter https://psych0d0g.github.io/forge-dsp-gui-ng/ (zum Ansehen ohne Gerät: `?demo`). Fertig: App-Rahmen (Navigation nach Signalweg, hell/dunkel, Handy), Gerätemodell mit vollständigem Einlesen, Übersicht, Eingänge, Mixer (Profile, Routing-Übersicht, Drehregler), Filter & EQ (Frequenz- und Phasengang, Filterzüge), Laufzeit, Ausgänge, Steuerblöcke, Presets mit Abstimmungsdateien im `.cfg`-Format der Original-GUI, Diagnose, Konsole. Offen: Firmware-Update im Browser, Simulator, Pegelanzeige (braucht Firmware-Unterstützung), siehe Issues. Am echten Gerät sind bisher die verwendeten Befehle geprüft, die Seiten im Browser noch nicht durchgehend.
 
 ## Aufbau
 

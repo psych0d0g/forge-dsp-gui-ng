@@ -207,3 +207,20 @@ FILE_v10 = "biquad.3.1.calc=[3,80,0,707,0,128]"
       .toMatch(/^set\.1 modc\.9=\[1,108,02D7280F,0,0,0,0,1E100000\];[0-9A-F]{2}\r\n$/);
   });
 });
+
+import { availableTypes, emptyModc, eventOptions, modcName, modcText } from "../src/lib/device";
+
+describe("MODC blocks", () => {
+  it("text as the firmware prints it, names, available types", async () => {
+    const s = await readDevice(new ForgeClient(new Recorded(fixture("V40-96ELN")), 100, 10));
+    expect(modcText(s.modc[9])).toBe("[1,108,02D7280F,0,0,0,0,1E100000]");
+    expect(modcText(emptyModc())).toBe("[0,0,00000000,0,0,0,0,00000000]");
+    expect(modcName(108)).toBe("Loudness");
+    expect(modcName(200)).toBe("Typ 200");
+    const types = availableTypes(s).map((t) => t.type);
+    expect(types).toContain(108);      // port extension, version 20
+    expect(types).toContain(66);
+    expect(types).not.toContain(79);   // ES9038PRO: not in this model
+    expect(eventOptions(32).at(-1)).toEqual({ value: 128, label: "128: Ausgang Block 32" });
+  });
+});

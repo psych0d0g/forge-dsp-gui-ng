@@ -37,6 +37,12 @@ export function demoState(): DeviceState {
   for (const ch of [3, 4]) { s.biquads[ch][1] = on(9, 320); s.biquads[ch][2] = on(3, 3200); s.biquads[ch][3] = on(3, 3200); s.biquads[ch][4] = on(1, 1250, -40, 3000); s.biquads[ch][5] = on(15, 9000, 20); }
   for (const ch of [5, 6]) { s.biquads[ch][1] = on(9, 70); s.biquads[ch][2] = on(3, 320); s.biquads[ch][3] = on(1, 125, -50, 4000); }
   for (const ch of [7, 8]) { s.biquads[ch][1] = on(13, 28, 0, 900); s.biquads[ch][2] = on(3, 70); s.biquads[ch][3] = on(3, 70); s.biquads[ch][4] = on(1, 45, 30, 2500); s.biquads[ch][5] = on(22, 70, 0, 707, 60); }
+  s.identity.modcBlocks = 32;
+  s.modcVersions = Array(64).fill(20);
+  const blk = (enable: number, type: number, flags: number[], events: number[], sets: number[]) => ({ enable, type, flags, events, sets });
+  s.modc = { 1: blk(1, 86, [0, 0, 0, 0], [0, 0, 0, 0], [255, 0, 127, 0]), 2: blk(1, 16, [255, 0, 0, 0], [58, 59, 0, 0], [255, 0, 0, 0]),
+    3: blk(1, 108, [15, 215, 40, 15], [98, 0, 0, 0], [100, 0, 16, 39]), 4: blk(0, 106, [8, 0, 0, 0], [62, 0, 0, 0], [4, 0, 0, 0]),
+    5: blk(1, 96, [1, 0, 0, 0], [0, 6, 0, 0], [3, 2, 0, 0]), 32: blk(1, 193, [0, 0, 0, 0], [4, 0, 6, 128], [4, 5, 4, 4]) };
   s.preset = { loaded: 1, select: 255 };
   s.clickless = 1;
   s.supply = [3320, 13800];
