@@ -4,3 +4,5 @@ esp32/.pio/
 esp32/web/
 esp32/sdkconfig.*
 !esp32/sdkconfig.defaults
+__pycache__/
+*.pyc
