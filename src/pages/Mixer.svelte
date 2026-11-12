@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app, inName, inShort, outName, write } from "../lib/app.svelte";
-  import { inputSide, inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames } from "../lib/device";
+  import { inputSide, inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames,
+    sumsActive, sumsMapping } from "../lib/device";
   import Knob from "../components/Knob.svelte";
 
   const d = $derived(app.device);
@@ -16,10 +17,17 @@
   const inputs = inputsLeftFirst(MIXER_INPUTS);  // left before right within each stereo input
   // sources in groups: analog inputs (as many as gain.in has, 6), digital (the rest), the buses
   const analog = $derived(Math.min(MIXER_INPUTS, d.gain.in.length || 6));
+  // "All Over": the signal sums as a common path in front of all outputs; hidden while off
+  const allOver = $derived(sumsActive(d, profile));
+  function toggleAllOver() {
+    for (const [c, g, v] of sumsMapping(d, profile, !allOver)) set(c, g, v);
+    if (group >= groups.length) group = 0;
+  }
+  const cols = $derived(allOver ? [...inputs, ...MIXER_BUS_COLUMNS] : inputs);
   const srcGroups = $derived([
     { label: "Analog", cols: inputs.filter((g) => g <= analog) },
     { label: "Digital", cols: inputs.filter((g) => g > analog) },
-    { label: "Signalsumme", cols: MIXER_BUS_COLUMNS },
+    ...(allOver ? [{ label: "All Over", cols: MIXER_BUS_COLUMNS }] : []),
   ]);
   const groupStart = (g: number) => g === analog + 2 || g === MIXER_INPUTS + 1;  // first column of Digital / sums
 
@@ -27,11 +35,11 @@
   interface Dest { row: number; label: string; nr: string }
   const dests = $derived<Dest[]>([
     ...d.gain.out.map((_, i) => ({ row: mixerRowOfOutput(i + 1), label: outName(i + 1), nr: String(i + 1) })),
-    ...MIXER_BUS_ROWS.map((row, i) => ({ row, label: BUS[i], nr: "" })),  // the sums always come last
+    ...(allOver ? MIXER_BUS_ROWS.map((row, i) => ({ row, label: BUS[i], nr: "" })) : []),  // the sums always come last
   ]);
   const groups = $derived(Array.from({ length: Math.ceil(dests.length / 2) }, (_, i) => dests.slice(2 * i, 2 * i + 2)));
   let group = $state(0);  // first output pair
-  const groupLabel = (g: Dest[]) => (g[0].nr ? `Ausgang ${g.map((x) => x.nr).join(" / ")}` : "Signalsumme A / B");
+  const groupLabel = (g: Dest[]) => (g[0].nr ? `Ausgang ${g.map((x) => x.nr).join(" / ")}` : "All Over: Summe A / B");
 
   // mixer.P.1.10 is the source select of the profile, not a mixer value
   const has = (c: number, g: number) => grid[c]?.[g] !== undefined && !(c === 1 && g === 10);
@@ -72,6 +80,9 @@
     <button class="primary" onclick={activate}>Aktivieren</button>
     <span class="muted">Nicht aktiv: Änderungen werden gespeichert und erst nach dem Aktivieren hörbar.</span>
   {/if}
+  <button class="allover" class:on={allOver} role="switch" aria-checked={allOver} onclick={toggleAllOver}
+    title="Gemeinsamer Signalweg mit eigener Filterkette vor allen Ausgängen (Summe A links, Summe B rechts)">
+    <span class="knob"></span>All Over</button>
   <label class="src">
     <span class="muted">Digitale Quelle</span>
     <select value={grid[1]?.[10] ?? 0} onchange={(e) => source(Number(e.currentTarget.value))}>
@@ -85,13 +96,13 @@
   <!-- routing at a glance; a click selects the destination -->
   <section class="panel map" aria-label="Routing-Übersicht">
     <h3>Routing</h3>
-    <div class="maphead"><span></span>{#each [...inputs, ...MIXER_BUS_COLUMNS] as g}<span class="num" class:gs={groupStart(g)} title={colName(g)}>{g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : inputSide(g)}</span>{/each}</div>
+    <div class="maphead"><span></span>{#each cols as g}<span class="num" class:gs={groupStart(g)} title={colName(g)}>{g > MIXER_INPUTS ? "AB"[g - MIXER_INPUTS - 1] : inputSide(g)}</span>{/each}</div>
     {#each groups as grp, gi}
       <button class="maprow" class:on={group === gi} aria-pressed={group === gi} onclick={() => (group = gi)}>
         {#each grp as dst}
           <span class="mapline">
             <span class="mapname">{#if dst.nr}<span class="num n">{dst.nr}</span>{/if}{dst.label}</span>
-            {#each [...inputs, ...MIXER_BUS_COLUMNS] as g}
+            {#each cols as g}
               <span class="cell" class:gs={groupStart(g)} class:none={!has(dst.row, g)} style="--v:{Math.min(100, grid[dst.row]?.[g] ?? 0)}"
                 title="{colName(g)} → {dst.label}: {grid[dst.row]?.[g] ?? '–'}"></span>
             {/each}
@@ -127,8 +138,9 @@
       </div>
     {/each}
     <p class="muted small">Regler ziehen oder Wert eintippen, 100 % = voller Pegel. Doppelklick schaltet zwischen 0 und 100.
-      Die Signalsummen A und B mischen Eingänge vorab zusammen und haben eine eigene Filterkette; ihr Ausgang lässt sich auf
-      jeden Kanal geben.</p>
+      {#if allOver}„All Over“ ist an: Summe A (links) und B (rechts) liegen auf allen Ausgängen und haben unter „Filter & EQ“ eine
+        eigene Filterkette. Was in die Summen geht, steht unter „All Over: Summe A / B“. Eingänge, die zusätzlich direkt auf
+        einem Ausgang liegen, sind dort doppelt zu hören.{/if}</p>
   </section>
 </div>
 
@@ -138,14 +150,20 @@
   .tabs { display: flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
   .tabs button { border: 0; border-radius: 0; background: none; padding: .4rem .85rem; color: var(--muted); display: inline-flex; align-items: center; gap: .45rem; }
   .tabs button.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); }
-  .src { display: flex; align-items: center; gap: .6rem; margin-left: auto; }
+  .src { display: flex; align-items: center; gap: .6rem; }
+  .allover { margin-left: auto; display: inline-flex; align-items: center; gap: .55rem; padding: .35rem .8rem .35rem .45rem; color: var(--muted); }
+  .allover .knob { width: 2rem; height: 1.15rem; border-radius: 99px; background: var(--line-strong); position: relative; transition: background .12s; }
+  .allover .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.15rem - 4px); height: calc(1.15rem - 4px); border-radius: 50%; background: var(--fg); transition: transform .12s; }
+  .allover.on { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .allover.on .knob { background: var(--accent); }
+  .allover.on .knob::after { transform: translateX(.85rem); }
   select { padding: .4rem .6rem; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--raised); }
   select option { background: var(--bg); }
 
   .layout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .75rem; align-items: start; }
   .map { padding: .85rem .6rem .6rem; display: grid; gap: 2px; }
   .map h3 { padding: 0 .4rem .4rem; }
-  .maphead, .mapline { display: grid; grid-template-columns: 7.5rem repeat(6, .8rem) 1.15rem .8rem 1.15rem .8rem; gap: 3px; align-items: center; }
+  .maphead, .mapline { display: grid; grid-template-columns: 7.5rem repeat(6, .8rem) 1.15rem .8rem; grid-auto-flow: column; grid-auto-columns: .8rem; gap: 3px; align-items: center; }
   .maphead { padding: 0 .4rem; font-size: .62rem; color: var(--faint); text-align: center; }
   .maprow { display: grid; gap: 3px; padding: .3rem .4rem; border: 1px solid transparent; background: none; border-radius: 8px; text-align: left; font: inherit; }
   .maprow.on { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -165,5 +183,5 @@
   .sgknobs { display: flex; flex-wrap: wrap; gap: .4rem .1rem; }
   .gs { margin-left: .35rem; }
   .small { font-size: .8rem; }
-  @media (max-width: 68rem) { .layout { grid-template-columns: minmax(0, 1fr); } .src { margin-left: 0; } }
+  @media (max-width: 68rem) { .layout { grid-template-columns: minmax(0, 1fr); } .allover { margin-left: 0; } }
 </style>

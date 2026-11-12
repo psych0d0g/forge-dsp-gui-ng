@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import { app, outName, write } from "../lib/app.svelte";
-  import { isPort, limitsOf, type Biquad } from "../lib/device";
+  import { isPort, limitsOf, sumsActiveAnywhere, type Biquad } from "../lib/device";
   import { isActive, typeInfo, TYPES } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
@@ -13,7 +13,8 @@
   const port = $derived(isPort(d));
   // channels as the firmware numbers them: outputs 1..n, 35/36 = the two signal sums of the mixer
   const BUS: Record<number, string> = { 35: "Summe A", 36: "Summe B" };
-  const channels = $derived(Object.keys(d.biquads).map(Number).sort((a, b) => a - b));  // outputs first, the sums (35/36) last
+  // outputs first, the sums (35/36) last and only while "All Over" is on in the mixer
+  const channels = $derived(Object.keys(d.biquads).map(Number).filter((c) => c < 30 || sumsActiveAnywhere(d)).sort((a, b) => a - b));
   const chName = (ch: number) => BUS[ch] ?? outName(ch);
   let ch = $state(0);
   $effect(() => {

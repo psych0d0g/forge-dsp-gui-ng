@@ -224,3 +224,23 @@ describe("MODC blocks", () => {
     expect(eventOptions(32).at(-1)).toEqual({ value: 128, label: "128: Ausgang Block 32" });
   });
 });
+
+import { sumsActive, sumsActiveAnywhere, sumsMapping } from "../src/lib/device";
+
+describe("signal sums (All Over)", () => {
+  it("on maps A to the left and B to the right outputs, off clears them", async () => {
+    const s = await readDevice(new ForgeClient(new Recorded(fixture("V40-96ELN")), 100, 10));
+    for (const c of Object.keys(s.mixer.values[1])) for (const g of [9, 10]) if (s.mixer.values[1][+c][g] !== undefined) s.mixer.values[1][+c][g] = 0;
+    expect(sumsActive(s, 1)).toBe(false);
+    const on = sumsMapping(s, 1, true);
+    expect(on).toHaveLength(8);
+    expect(on.slice(0, 2)).toEqual([[3, 9, 100], [4, 10, 100]]);     // output 1 <- A, output 2 <- B
+    for (const [c, g, v] of on) s.mixer.values[1][c][g] = v;
+    expect(sumsActive(s, 1)).toBe(true);
+    expect(sumsActiveAnywhere(s)).toBe(true);
+    expect(sumsMapping(s, 1, true)).toEqual([]);                      // already as wanted
+    const off = sumsMapping(s, 1, false);
+    expect(off).toHaveLength(8);
+    expect(off.every(([, , v]) => v === 0)).toBe(true);
+  });
+});

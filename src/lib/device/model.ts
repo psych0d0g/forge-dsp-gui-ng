@@ -356,3 +356,26 @@ export function sourceNames(s: DeviceState): { value: number; label: string }[] 
   const count = Math.max(names.length, s.mixer.inputMax ?? 0);
   return Array.from({ length: count }, (_, i) => ({ value: i + 1, label: names[i] || `Quelle ${i + 1}` }));
 }
+
+/** The signal sums ("All Over": a common path with its own filter chain in front of all outputs)
+ * are in use in a profile when an output takes a share of sum A or B. */
+export function sumsActive(s: DeviceState, profile: number): boolean {
+  const g = s.mixer.values[profile] ?? {};
+  return s.gain.out.some((_, i) => MIXER_BUS_COLUMNS.some((c) => (g[mixerRowOfOutput(i + 1)]?.[c] ?? 0) > 0));
+}
+export const sumsActiveAnywhere = (s: DeviceState) => Object.keys(s.mixer.values).some((p) => sumsActive(s, Number(p)));
+
+/** mixer writes [channel row, column, value] that switch the sums on (A to the left = odd
+ * outputs, B to the right = even outputs, full level) or off (no output takes a sum) */
+export function sumsMapping(s: DeviceState, profile: number, on: boolean): [number, number, number][] {
+  const g = s.mixer.values[profile] ?? {};
+  const out: [number, number, number][] = [];
+  s.gain.out.forEach((_, i) => {
+    const row = mixerRowOfOutput(i + 1);
+    MIXER_BUS_COLUMNS.forEach((col, k) => {
+      const want = on && k === i % 2 ? 100 : 0;
+      if (g[row]?.[col] !== undefined && g[row][col] !== want) out.push([row, col, want]);
+    });
+  });
+  return out;
+}
