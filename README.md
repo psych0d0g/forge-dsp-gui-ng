@@ -9,14 +9,16 @@ Neue Bedienoberfläche für **Forge DSP** und **ETON CORE D8** als Nachfolger de
 
 Die Firmware des Forge (Original BASCOM 1.11.6000 oder der C-Port [forge-dsp-firmware](https://github.com/psych0d0g/forge-dsp-firmware)) bleibt unverändert, die App nutzt das Textprotokoll.
 
-**Stand: Grundgerüst.** Verbinden, Gerät erkennen und Konsole funktionieren, die eigentlichen Seiten (Pegel, Mixer, Biquads, Delay, MODC) fehlen noch.
+**Stand:** Läuft unter https://psych0d0g.github.io/forge-dsp-gui-ng/ (zum Ansehen ohne Gerät: `?demo`). Fertig: App-Rahmen (Navigation nach Signalweg, hell/dunkel, Handy), Gerätemodell mit vollständigem Einlesen, Übersicht, Eingänge, Ausgänge (Pegel, Mute, Polarität), Konsole. In Arbeit: Mixer, Filter & EQ, Laufzeit, Steuerblöcke, Presets, Diagnose, Firmware-Update (siehe Issues).
 
 ## Aufbau
 
 ```
 src/lib/protocol/   Textprotokoll: Zeilen bauen (Ziel, Prüfsumme), Antworten parsen, Client mit Warteschlange
 src/lib/transport/  Web Serial (USB) und WebSocket (ESP32) hinter einer Schnittstelle
-src/App.svelte      Oberfläche (Svelte 5)
+src/lib/device/     Gerätemodell: Zustand, Einlesen, Übernahme von Antworten und Ereignissen, Demo-Gerät
+src/lib/app.svelte.ts  Zustand der App (Verbindung, Gerät, Schreiben mit Drosselung)
+src/App.svelte      App-Rahmen; src/pages/ Seiten, src/components/ Bedienelemente (Svelte 5)
 tests/              Vitest, Antworten wie sie die Firmware sendet
 esp32/              ESP-IDF-Firmware der Brücke (PlatformIO), bettet die gebaute App ein
 ```

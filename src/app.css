@@ -1,14 +1,83 @@
+/* Design tokens. Dark is the home of audio tools; light follows the system or the toggle.
+ * Frames (sidebar, bars) are frosted glass over a quiet backdrop, work surfaces are almost
+ * opaque so values stay readable. */
 :root {
-  --bg: #f6f7f9; --fg: #1b1f24; --muted: #5b6573; --card: #ffffff; --line: #d9dee5;
-  --accent: #c2410c; --ok: #15803d; --err: #b91c1c; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  color-scheme: light dark;
+  --bg: #0d0f13; --glow-a: rgba(40, 140, 255, .26); --glow-b: rgba(110, 90, 255, .20);
+  --glass: rgba(26, 29, 36, .55); --panel: rgba(27, 30, 37, .88); --raised: rgba(255, 255, 255, .055);
+  --line: rgba(255, 255, 255, .09); --line-strong: rgba(255, 255, 255, .16);
+  --fg: #e8eaee; --muted: #98a1ae; --faint: #6b7380;
+  --accent: #3d9bff; --accent-ink: #04111f; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 12px 32px -18px rgba(0, 0, 0, .7);
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --radius: 12px; --blur: blur(22px) saturate(1.5);
+  color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #111418; --fg: #e6e9ee; --muted: #9aa4b2; --card: #1a1f25; --line: #2c333c; --accent: #fb923c; --ok: #4ade80; --err: #f87171; }
+:root[data-theme="light"] {
+  --bg: #eef0f4; --glow-a: rgba(40, 140, 255, .16); --glow-b: rgba(110, 90, 255, .12);
+  --glass: rgba(250, 251, 253, .66); --panel: rgba(255, 255, 255, .92); --raised: rgba(15, 23, 42, .045);
+  --line: rgba(15, 23, 42, .10); --line-strong: rgba(15, 23, 42, .18);
+  --fg: #171a1f; --muted: #566070; --faint: #8a93a0;
+  --accent: #0a66d6; --accent-ink: #fff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 12px 28px -20px rgba(15, 23, 42, .35);
+  color-scheme: light;
 }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef0f4; --glow-a: rgba(40, 140, 255, .16); --glow-b: rgba(110, 90, 255, .12);
+    --glass: rgba(250, 251, 253, .66); --panel: rgba(255, 255, 255, .92); --raised: rgba(15, 23, 42, .045);
+    --line: rgba(15, 23, 42, .10); --line-strong: rgba(15, 23, 42, .18);
+    --fg: #171a1f; --muted: #566070; --faint: #8a93a0;
+    --accent: #0a66d6; --accent-ink: #fff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+    --shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 12px 28px -20px rgba(15, 23, 42, .35);
+    color-scheme: light;
+  }
+}
+/* no transparency wanted, or no backdrop-filter: solid frames */
+@media (prefers-reduced-transparency: reduce) { :root { --glass: var(--panel); --blur: none; } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { :root { --glass: var(--panel); } }
+
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
-button { font: inherit; padding: .45rem .9rem; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button:disabled { opacity: .5; cursor: default; }
-input { font: inherit; padding: .45rem .6rem; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+html, body, #app { height: 100%; }
+body {
+  margin: 0; color: var(--fg); font: 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(52rem 34rem at 0% 0%, var(--glow-a), transparent 62%),
+    radial-gradient(60rem 40rem at 100% 100%, var(--glow-b), transparent 62%),
+    var(--bg);
+  background-attachment: fixed; overflow: hidden;
+}
+h1, h2, h3, p { margin: 0; }
+h2 { font-size: 1.25rem; font-weight: 650; letter-spacing: -.01em; }
+h3 { font-size: .72rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+button, input, select { font: inherit; color: inherit; }
+button {
+  padding: .42rem .85rem; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--raised);
+  cursor: pointer; transition: background .12s, border-color .12s, transform .05s;
+}
+button:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #fff); }
+button.ghost { border-color: transparent; background: transparent; }
+input[type="text"], input:not([type]) {
+  padding: .42rem .6rem; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--raised);
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.glass { background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.tag { font-size: .68rem; padding: .08rem .4rem; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted); }
+.dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.dot.busy { background: var(--warn); }
+.dot.err { background: var(--err); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99px; border: 2px solid transparent; background-clip: content-box; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

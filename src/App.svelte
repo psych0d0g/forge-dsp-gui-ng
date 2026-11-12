@@ -1,129 +1,208 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { ForgeClient, type Answer } from "./lib/protocol";
-  import type { Transport } from "./lib/transport/types";
-  import { openWebSerial, webSerialAvailable } from "./lib/transport/webserial";
-  import { openWebSocket, servedByBridge } from "./lib/transport/websocket";
+  import { app, connect, disconnect, reload, type PageId } from "./lib/app.svelte";
+  import { webSerialAvailable } from "./lib/transport/webserial";
+  import { servedByBridge } from "./lib/transport/websocket";
+  import Icon from "./components/Icon.svelte";
+  import Overview from "./pages/Overview.svelte";
+  import Inputs from "./pages/Inputs.svelte";
+  import Outputs from "./pages/Outputs.svelte";
+  import Console from "./pages/Console.svelte";
+  import Planned from "./pages/Planned.svelte";
 
-  let transport: Transport | null = $state(null);
-  let client: ForgeClient | null = $state(null);
-  let onBridge = $state(false);
-  let error = $state("");
-  let device = $state<{ key?: string; firmware?: string; info?: string }>({});
-  let log = $state<{ dir: "rx" | "tx"; text: string }[]>([]);
-  let input = $state("get.1 system.ping");
   const version = __APP_VERSION__;
   const commit = __APP_COMMIT__;
+  let onBridge = $state(false);
+  let navOpen = $state(false);
+  let theme = $state<"dark" | "light" | "">("");
+
+  // navigation in the order of the signal path, then control, then tools
+  const NAV: { group: string; items: { id: PageId; label: string; ready?: boolean }[] }[] = [
+    { group: "Gerät", items: [{ id: "overview", label: "Übersicht", ready: true }] },
+    { group: "Signalweg", items: [
+      { id: "inputs", label: "Eingänge", ready: true }, { id: "mixer", label: "Mixer" },
+      { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" },
+      { id: "outputs", label: "Ausgänge", ready: true }] },
+    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" }] },
+    { group: "Werkzeuge", items: [
+      { id: "diagnose", label: "Diagnose" }, { id: "firmware", label: "Firmware" },
+      { id: "console", label: "Konsole", ready: true }] },
+  ];
+  const PLANNED: Partial<Record<PageId, { title: string; text: string; issue: number }>> = {
+    mixer: { title: "Mixer", issue: 4, text: "Matrix aus Ausgängen und Eingängen je Mixer-Position: welche Quelle mit welchem Anteil auf welchen Kanal geht." },
+    filters: { title: "Filter & EQ", issue: 5, text: "Weichen, parametrischer EQ und Allpässe je Kanal, mit Frequenz- und Phasengang." },
+    delay: { title: "Laufzeit", issue: 6, text: "Laufzeitkorrektur je Ausgang in Millisekunden oder Zentimetern." },
+    modc: { title: "Steuerblöcke", issue: 7, text: "Lautstärke, Loudness, Eingangsumschaltung, Mono und weitere Blöcke mit ihren Ereignissen." },
+    presets: { title: "Presets", issue: 8, text: "Abstimmungen laden, speichern, kopieren und als Datei sichern." },
+    diagnose: { title: "Diagnose", issue: 9, text: "Bausteine auf den I2C-Bussen, Empfänger- und DAC-Status, Versorgung, Diagnosebericht." },
+    firmware: { title: "Firmware", issue: 10, text: "Firmware-Update direkt aus dem Browser, mit Sicherung vorab." },
+  };
 
   onMount(async () => {
+    theme = (localStorage.getItem("theme") as "dark" | "light" | null) ?? "";
+    // ?demo (and &page=outputs): the interface without a device, for a first look and screenshots
+    const q = new URLSearchParams(location.search);
+    if (q.get("theme") === "dark" || q.get("theme") === "light") theme = q.get("theme") as "dark" | "light";
+    if (q.has("demo")) {
+      await connect("demo");
+      if (q.get("page")) app.page = q.get("page") as PageId;
+      return;
+    }
     onBridge = await servedByBridge();
     if (onBridge) connect("esp");
   });
-
-  async function connect(kind: "usb" | "esp") {
-    error = "";
-    try {
-      transport = kind === "usb" ? await openWebSerial() : await openWebSocket();
-      client = new ForgeClient(transport);
-      client.onRaw((text, dir) => (log = [...log.slice(-300), { dir, text: text.trimEnd() }]));
-      await identify();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-      transport = null;
-      client = null;
-    }
+  $effect(() => {
+    if (theme) document.documentElement.dataset.theme = theme;
+  });
+  function toggleTheme() {
+    const dark = theme ? theme === "dark" : !matchMedia("(prefers-color-scheme: light)").matches;
+    theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", theme); } catch { /* private mode */ }
   }
-
-  async function disconnect() {
-    await transport?.close();
-    transport = null;
-    client = null;
-    device = {};
+  function open(id: PageId) {
+    app.page = id;
+    navOpen = false;
   }
-
-  const first = (a: Answer[]) => (a[0]?.value !== undefined ? JSON.stringify(a[0].value) : a[0]?.message);
-
-  async function identify() {
-    if (!client) return;
-    device = {
-      key: first(await client.get("system.key.info")),
-      firmware: first(await client.get("system.firmware")),
-      info: first(await client.get("system.info")),
-    };
-  }
-
-  async function sendRaw(e: SubmitEvent) {
-    e.preventDefault();
-    if (client && input.trim()) await client.send(input.trim()).catch((x) => (error = String(x)));
-  }
+  const online = $derived(app.status === "online");
+  const title = $derived(app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : "Kein Gerät");
 </script>
 
-<header>
-  <h1>Forge DSP</h1>
-  {#if transport}
-    <span class="badge ok">verbunden: {transport.name}</span>
-    <button onclick={disconnect}>Trennen</button>
-  {:else}
-    {#if webSerialAvailable()}
-      <button class="primary" onclick={() => connect("usb")}>USB verbinden</button>
+<div class="shell" class:nav-open={navOpen}>
+  <aside class="glass side">
+    <div class="brand"><span class="logo">F</span><span>Forge DSP</span></div>
+    <nav>
+      {#each NAV as g}
+        <h3>{g.group}</h3>
+        {#each g.items as it}
+          <button class="navitem" class:active={app.page === it.id} aria-current={app.page === it.id ? "page" : undefined}
+            onclick={() => open(it.id)}>
+            <Icon name={it.id} /><span>{it.label}</span>{#if !it.ready}<span class="tag">bald</span>{/if}
+          </button>
+        {/each}
+      {/each}
+    </nav>
+  </aside>
+  <button class="scrim" aria-label="Menü schließen" onclick={() => (navOpen = false)}></button>
+
+  <header class="glass top">
+    <button class="ghost menu" aria-label="Menü" onclick={() => (navOpen = !navOpen)}><Icon name="menu" size={20} /></button>
+    <div class="device">
+      <span class="dot" class:ok={online} class:busy={app.status === "connecting" || app.status === "reading"}></span>
+      <div><strong>{title}</strong>
+        <span class="muted sub">{online ? `${app.transportName}${app.demo ? " (ohne Gerät)" : ""}` : app.status === "offline" ? "nicht verbunden" : "verbinde …"}</span></div>
+    </div>
+    <div class="actions">
+      {#if online}
+        {#if !app.demo}<button class="ghost" title="Alles neu einlesen" onclick={reload}><Icon name="refresh" /></button>{/if}
+        <button onclick={disconnect}>Trennen</button>
+      {:else if app.status === "offline"}
+        <!-- the welcome panel has the connect buttons; here only where it is not shown -->
+        {#if app.page === "console"}
+          {#if webSerialAvailable()}<button class="primary" onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>{/if}
+          {#if onBridge}<button onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
+        {/if}
+      {/if}
+      <button class="ghost" title="Hell/Dunkel" aria-label="Hell/Dunkel" onclick={toggleTheme}><Icon name="sun" /></button>
+    </div>
+  </header>
+
+  <main>
+    {#if app.error}
+      <div class="panel alert" role="alert"><span>{app.error}</span><button class="ghost" onclick={() => (app.error = "")}>Schließen</button></div>
     {/if}
-    {#if onBridge}<button onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
-  {/if}
-</header>
-
-<main>
-  {#if error}<p class="err">{error}</p>{/if}
-  {#if !transport && !webSerialAvailable() && !onBridge}
-    <section class="hint">
-      <h2>Dieser Browser kann nicht per USB verbinden</h2>
-      <p>Die Verbindung zum Forge läuft über Web Serial. Das gibt es in <strong>Chrome</strong> und <strong>Edge</strong>
-        (Desktop), nicht in Firefox und Safari. Alternativ: ESP32-Brücke am RS485-Port, dann läuft die Oberfläche
-        in jedem Browser über WLAN.</p>
-    </section>
-  {/if}
-
-  <section>
-    <h2>Gerät</h2>
-    {#if device.key}
-      <dl>
-        <dt>Kennung</dt><dd>{device.key}</dd>
-        <dt>Firmware</dt><dd>{device.firmware}</dd>
-        <dt>Info</dt><dd>{device.info}</dd>
-      </dl>
-    {:else}
-      <p class="muted">Nicht verbunden. Per USB (Chrome/Edge, Web Serial) oder über den ESP32 am RS485-Port.</p>
+    {#if app.status === "reading" && app.progress}
+      <div class="center">
+        <section class="panel welcome">
+          <h2>Gerät wird eingelesen</h2>
+          <p class="muted">Mixer und Filter brauchen einige Sekunden (38400 Baud).</p>
+          <progress value={app.progress.done} max={app.progress.total}></progress>
+          <p class="muted num">{app.progress.current}</p>
+        </section>
+      </div>
+    {:else if !online && app.page !== "console"}
+      <div class="center">
+        <section class="panel welcome">
+          <span class="logo big">F</span>
+          <h2>Forge DSP einrichten</h2>
+          {#if webSerialAvailable()}
+            <p class="muted">Forge per USB anschließen und verbinden. Die Oberfläche liest danach alle Einstellungen aus dem Gerät.</p>
+            <div class="btns">
+              <button class="primary" disabled={app.status !== "offline"} onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>
+              <button disabled={app.status !== "offline"} onclick={() => connect("demo")}>Ohne Gerät ansehen</button>
+            </div>
+          {:else}
+            <p class="muted">Dieser Browser bietet keine serielle Schnittstelle (Web Serial). Mit einem Browser, der sie
+              unterstützt, geht die Verbindung per USB; über die ESP32-Brücke am RS485-Port geht sie in jedem Browser per WLAN.</p>
+            <div class="btns">
+              {#if onBridge}<button class="primary" onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
+              <button onclick={() => connect("demo")}>Ohne Gerät ansehen</button>
+            </div>
+          {/if}
+        </section>
+      </div>
+    {:else if app.page === "overview"}<Overview />
+    {:else if app.page === "inputs"}<Inputs />
+    {:else if app.page === "outputs"}<Outputs />
+    {:else if app.page === "console"}<Console />
+    {:else if PLANNED[app.page]}<Planned {...PLANNED[app.page]!} />
     {/if}
-  </section>
+  </main>
 
-  <section>
-    <h2>Konsole</h2>
-    <form onsubmit={sendRaw}>
-      <input bind:value={input} spellcheck="false" />
-      <button type="submit" disabled={!client}>Senden</button>
-    </form>
-    <pre>{#each log as l}<span class={l.dir}>{l.dir === "tx" ? "→ " : "← "}{l.text}</span>
-{/each}</pre>
-  </section>
-</main>
-
-<footer>Forge DSP GUI NG {version} ({commit})</footer>
+  <footer class="glass status num">
+    <span>{online ? (app.writing ? "schreibe …" : "bereit") : "offline"}</span>
+    {#if online}
+      <span>{app.device.identity.port ? `Port ${app.device.identity.port}` : `Firmware ${app.device.identity.firmware}`}</span>
+      {#if app.device.preset.loaded !== null}<span>Preset {app.device.preset.loaded + 1}</span>{/if}
+      {#if app.device.temperature !== null}<span>{app.device.temperature.toFixed(1)} °C</span>{/if}
+    {/if}
+    <span class="right">GUI {version} ({commit})</span>
+  </footer>
+</div>
 
 <style>
-  header { display: flex; gap: .75rem; align-items: center; padding: .75rem 1rem; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
-  h1 { font-size: 1.1rem; margin: 0 auto 0 0; }
-  h2 { font-size: 1rem; margin: 0 0 .5rem; }
-  main { max-width: 60rem; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; min-width: 0; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: 0; }
-  dt { color: var(--muted); }
-  dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
-  form { display: flex; gap: .5rem; }
-  form input { flex: 1; min-width: 0; font-family: var(--mono); }
-  pre { font: 13px/1.4 var(--mono); max-height: 22rem; overflow: auto; margin: .75rem 0 0; white-space: pre-wrap; }
-  .tx { color: var(--accent); }
-  .badge.ok { color: var(--ok); }
-  .err { color: var(--err); margin: 0; }
-  .muted { color: var(--muted); margin: 0; }
-  .hint p { margin: 0; }
-  footer { max-width: 60rem; margin: 0 auto; padding: 0 1rem 1rem; color: var(--muted); font-size: .8rem; }
+  .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem 1fr; }
+  .side { grid-area: side; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 3; }
+  .brand { display: flex; align-items: center; gap: .6rem; padding: .95rem 1rem .6rem; font-weight: 650; letter-spacing: -.01em; }
+  .logo { width: 1.6rem; height: 1.6rem; border-radius: 7px; display: grid; place-items: center; font-weight: 800;
+    background: linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #3b2bd6)); color: var(--accent-ink); }
+  .logo.big { width: 3rem; height: 3rem; font-size: 1.5rem; border-radius: 12px; }
+  nav { overflow-y: auto; padding: 0 .5rem 1rem; display: flex; flex-direction: column; gap: 1px; }
+  nav h3 { padding: .9rem .55rem .3rem; }
+  .navitem { display: flex; align-items: center; gap: .65rem; width: 100%; text-align: left; border: 0; background: none; padding: .45rem .55rem;
+    border-radius: 8px; color: var(--muted); }
+  .navitem span:nth-child(2) { flex: 1; }
+  .navitem:hover { color: var(--fg); }
+  .navitem.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--fg); }
+  .navitem.active :global(svg) { color: var(--accent); }
+
+  .top { grid-area: top; display: flex; align-items: center; gap: .75rem; padding: .55rem 1rem; border-bottom: 1px solid var(--line); z-index: 2; }
+  .menu { display: none; padding: .3rem; }
+  .device { display: flex; align-items: center; gap: .65rem; margin-right: auto; min-width: 0; }
+  .device strong { display: block; line-height: 1.2; }
+  .sub { font-size: .8rem; }
+  .actions { display: flex; align-items: center; gap: .4rem; }
+  .actions button { display: inline-flex; align-items: center; gap: .4rem; }
+
+  main { grid-area: main; overflow: auto; padding: 1.25rem; display: flex; flex-direction: column; min-height: 0; }
+  .center { flex: 1; display: grid; place-items: center; }
+  .welcome { padding: 2rem; max-width: 30rem; display: grid; gap: .8rem; justify-items: start; }
+  .btns { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
+  .btns button { display: inline-flex; align-items: center; gap: .4rem; }
+  progress { width: 100%; accent-color: var(--accent); }
+  .alert { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .5rem .5rem .5rem 1rem; margin-bottom: 1rem;
+    border-color: var(--err); color: var(--err); }
+
+  .status { grid-area: status; display: flex; gap: 1.25rem; padding: .3rem 1rem; font-size: .75rem; color: var(--muted); border-top: 1px solid var(--line); }
+  .right { margin-left: auto; }
+  .scrim { display: none; }
+
+  @media (max-width: 52rem) {
+    .shell { grid-template: "top" auto "main" 1fr "status" auto / 1fr; }
+    .side { position: fixed; inset: 0 auto 0 0; width: 15rem; transform: translateX(-100%); transition: transform .18s; }
+    .nav-open .side { transform: none; }
+    .nav-open .scrim { display: block; position: fixed; inset: 0; z-index: 2; background: rgba(0, 0, 0, .45); border: 0; border-radius: 0; padding: 0; }
+    .menu { display: inline-flex; }
+    main { padding: .9rem; }
+    .status span:not(:first-child):not(.right) { display: none; }
+  }
 </style>
