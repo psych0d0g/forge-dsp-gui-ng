@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, query, withSd, writeOnce } from "../lib/app.svelte";
-  import { chipAt, ct7302Locked, decodeLog, errorName, es9018Locked, hardwareCheck, hex2, isEeprom, isPort, LOG_FILE, LOG_FILE_BIT,
+  import { chipAt, ct7302Locked, decodeLog, exportState, errorName, es9018Locked, hardwareCheck, hex2, isEeprom, isPort, LOG_FILE, LOG_FILE_BIT,
     LOG_LEVELS, LOG_OLD, logModule, logText, parseDspBoot, parseRegister, parseScan, sdDelete, sdDownload, sdList,
     type LogRecord } from "../lib/device";
   import Icon from "../components/Icon.svelte";
@@ -110,6 +110,15 @@
   const ms = (v: number) => (v < 60000 ? `${(v / 1000).toFixed(1)} s` : `${Math.floor(v / 60000)} min ${Math.round((v % 60000) / 1000)} s`);
   const LEVEL_CLASS = ["", "bad", "bad", "warnl", "", "muted", "muted", "muted"];
 
+  /** the whole model as read from the device (#2) */
+  function saveState() {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([exportState(app.device)], { type: "application/json" }));
+    a.download = `forge-zustand-${d.identity.model || "gerät"}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   // port extension: set system.errors=0 empties the counters (the original only by a factory reset)
   let clearError = $state("");
   async function clearErrors() {
@@ -172,6 +181,8 @@
   <div class="acts">
     <button onclick={refresh} disabled={busy}><Icon name="refresh" size={16} /> {busy ? "Prüfe …" : "Neu prüfen"}</button>
     <button onclick={download} disabled={!checked}>Bericht speichern</button>
+    <button onclick={saveState} disabled={app.status !== "online"}
+      title="Alles, was die Oberfläche vom Gerät gelesen hat, als JSON-Datei (für Fehlerberichte und Vergleiche)">Zustand speichern</button>
   </div>
 </header>
 

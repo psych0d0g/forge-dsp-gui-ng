@@ -47,6 +47,18 @@ describe("values", () => {
 });
 
 describe("readDevice", () => {
+  it("asks a lost answer once more (#2)", async () => {
+    const t = new Recorded(fixture("V40-96ELN"));
+    let lost = 0;
+    const write = t.write.bind(t);
+    t.write = async (line: string) => {
+      if (line.trim() === "get.1 gain.out" && !lost++) { t.sent.push(line.trim()); return; }  // first one: no answer
+      return write(line);
+    };
+    const s = await readDevice(new ForgeClient(t, 100, 10));
+    expect(t.sent.filter((l) => l === "get.1 gain.out").length).toBe(2);
+    expect(s.gain.out.slice(0, 2)).toEqual([223, 199]);
+  });
   it("reads a V40-96ELN with the port firmware", async () => {
     const t = new Recorded(fixture("V40-96ELN"));
     const progress: number[] = [];

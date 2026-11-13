@@ -69,12 +69,15 @@ export async function readDevice(
     onProgress({ done: i, total: steps.length, current: reg });
     // original firmware (answered system.firmware, but not system.firmware.port): not asked
     if (port && reg !== "system.firmware.port" && state.identity.port === null) continue;
-    let answers: Answer[];
-    try {
-      answers = await client.get(reg);
-    } catch {
-      continue;  // no answer: optional register
+    let answers: Answer[] | null = null;
+    // a lost answer (38400 Bd, a device busy with a preset load) is asked once more; an error answer
+    // ("unknown command") is an answer and ends it
+    for (let t = 0; t < 2 && !answers; t++) {
+      try {
+        answers = await client.get(reg);
+      } catch { /* no answer */ }
     }
+    if (!answers) continue;  // optional register
     for (const a of answers) {
       applyAnswer(state, a);
       if (a.kind === "get" && SUBLISTS.includes(a.register) && Array.isArray(a.value))
