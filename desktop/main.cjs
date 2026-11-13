@@ -3,9 +3,9 @@
 //    firmware.cjs straight from the GitHub releases
 //  - serial ports: a single CP2102 (the Forge's USB chip) is taken at once, otherwise a native choice
 //  - downloads of the page become a native "Save as" dialog, <input type=file> the native open dialog
-const { app, BrowserWindow, dialog, Menu, net, protocol, session, shell } = require("electron");
+const { app, BrowserWindow, dialog, Menu, protocol, shell } = require("electron");
+const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
 const firmware = require("./firmware.cjs");
 
 protocol.registerSchemesAsPrivileged([
@@ -13,6 +13,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const APP_DIR = path.join(__dirname, "app");
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
 
 // AppImage: newer distributions (AppArmor, user namespaces) refuse Chromium's sandbox there and the app
 // would not start. The app only shows its own page (forge://) and opens other links outside.
@@ -58,7 +59,12 @@ app.whenReady().then(() => {
     if (p.startsWith("firmware/")) return firmware.serve(p.slice("firmware/".length));
     const file = path.normalize(path.join(APP_DIR, p || "index.html"));
     if (!file.startsWith(APP_DIR)) return new Response("forbidden", { status: 403 });
-    return net.fetch(pathToFileURL(file).toString());
+    // fs reads inside app.asar as well (net.fetch with file:// does not: ERR_FILE_NOT_FOUND)
+    try {
+      return new Response(fs.readFileSync(file), { headers: { "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream" } });
+    } catch {
+      return new Response("not found", { status: 404 });
+    }
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
