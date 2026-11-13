@@ -77,6 +77,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: out
+          pattern: app-*   # not the web build
           merge-multiple: true
       - name: GitHub release
         env:
