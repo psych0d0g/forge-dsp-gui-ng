@@ -36,7 +36,7 @@ function attach(t: Transport) {
   transport = t;
   client = new ForgeClient(t);
   client.onRaw((text, dir) => {
-    if (polling || sdBusy) return;  // status reads and file blocks would flood the console
+    if (sdBusy || isPollLine(text)) return;  // status reads and file blocks would flood the console
     app.log.push({ dir, text: text.trimEnd() });
     if (app.log.length > 400) app.log.splice(0, app.log.length - 400);
   });
@@ -331,6 +331,14 @@ const VU_MS = 200;
 const STATUS_EVERY = 25;  // x VU_MS = 5 s
 let polling = false;
 let tick = 0;
+/** registers of the running status read: their requests and answers stay out of the console, the
+ *  lines of a command typed meanwhile do not */
+let pollRegs: string[] = [];
+const regOf = (text: string) => /^\s*\S+?\.\d+\s+([\w.]+)/.exec(text)?.[1] ?? null;   // "get.1 reg", " <.1 reg=…"
+function isPollLine(text: string) {
+  const r = pollRegs.length ? regOf(text) : null;
+  return r !== null && pollRegs.includes(r);
+}
 
 async function poll() {
   const c = client;
@@ -347,6 +355,7 @@ async function poll() {
   }
   if (!regs.length) return;
   polling = true;
+  pollRegs = regs;
   try {
     for (const reg of regs) {
       if (client !== c || app.writing > 0) break;
@@ -356,6 +365,7 @@ async function poll() {
     /* a missed status read is harmless, the next one follows */
   } finally {
     polling = false;
+    pollRegs = [];
   }
 }
 if (typeof window !== "undefined") setInterval(poll, VU_MS);

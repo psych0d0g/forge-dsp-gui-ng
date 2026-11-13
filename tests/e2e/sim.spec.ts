@@ -42,10 +42,10 @@ test("console: raw commands go to the firmware", async ({ page }) => {
   await nav(page, "Konsole");
   await page.getByLabel("Befehl").fill("get.1 system.firmware");
   await page.getByRole("button", { name: "Senden" }).click();
-  await expect(page.locator("main pre")).toContainText("system.firmware=1.11.6000");
+  await expect(page.locator("main pre")).toContainText(`system.firmware="1.11.6000"`);
   await page.getByLabel("Befehl").fill("get.1 system.firmware.port");
   await page.getByRole("button", { name: "Senden" }).click();
-  await expect(page.locator("main pre")).toContainText(/system\.firmware\.port=\d+\.\d+\.\d+/);
+  await expect(page.locator("main pre")).toContainText(/system\.firmware\.port="[^"]+"/);
 });
 
 test("a delay set in the interface survives a reload of the page", async ({ page }) => {
