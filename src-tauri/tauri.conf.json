@@ -28,7 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "category": "Audio",
+    "category": "Utility",
     "shortDescription": "Bedienoberfläche für Forge DSP und ETON CORE D8",
     "icon": [
       "icons/32x32.png",
