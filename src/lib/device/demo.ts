@@ -106,6 +106,7 @@ export class DemoCard {
 export class DemoTransport implements Transport {
   name = "Demo";
   sd = new DemoCard();
+  errors = "[[129,1],[3,2]]";
   /** a simulated bootloader target, so the firmware page can be tried without a device */
   bytes = new SimTarget();
   private fn: (l: string) => void = () => {};
@@ -115,6 +116,7 @@ export class DemoTransport implements Transport {
     const m = /^(get|set)\.(\S+) ([^=;\s]+)/.exec(line);
     if (!m) return;
     let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
+    if (m[1] === "set" && m[3] === "system.errors") this.errors = "[]";
     if (m[3].startsWith("system.sd")) {
       setTimeout(() => this.fn(this.sd.line(m[1], m[3], line)), 15);
       return;
@@ -131,7 +133,7 @@ export class DemoTransport implements Transport {
     else if (m[1] === "get") {
       const fixed: Record<string, string> = {
         "system.ping": '"pong"', "system.key.info": '"DEMO-96ELN-4.0-0000000000000000-CCBYNCSA-20261112-MDD"',
-        "system.feature.attributes.hw": "[110,96,63,63,2173,2173]", "system.errors": "[[129,1],[3,2]]", "system.supply": "[3320,13800]",
+        "system.feature.attributes.hw": "[110,96,63,63,2173,2173]", "system.errors": this.errors, "system.supply": "[3320,13800]",
         "i2c.1.scan": "[&H20,&H22,&H40,&H4E,&H68,&HA0,&HA8,&HE0]", "i2c.2.scan": "[&H68,&H6A,&H90,&HA0,&HA2]",
         "i2c.1.32.122": "&H04,&B00000100", "i2c.2.144.27": "&H01,&B00000001",
         "system.hardware.dsp": "[0,52648,900,0,0,0,41247,1750,0,0,0]",

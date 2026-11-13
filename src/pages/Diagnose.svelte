@@ -38,6 +38,16 @@
     if (app.status === "online" && !checked) refresh();
   });
 
+  // port extension: set system.errors=0 empties the counters (the original only by a factory reset)
+  let clearError = $state("");
+  async function clearErrors() {
+    if (busy || !confirm("Alle Fehlerzähler im Gerät zurücksetzen?")) return;
+    busy = true;
+    clearError = await writeOnce("system.errors", 0);
+    await query("system.errors");
+    busy = false;
+  }
+
   // register access
   let rBus = $state(1), rAddr = $state("20"), rReg = $state("7A"), rVal = $state(""), rOut = $state(""), expert = $state(false);
   const h = (t: string) => parseInt(t, 16);
@@ -129,7 +139,14 @@
     {/if}
   </section>
   <section class="panel tile">
-    <h3>Fehlerzähler</h3>
+    <div class="tilehead">
+      <h3>Fehlerzähler</h3>
+      {#if port && d.errors.length}
+        <button class="ghost small" onclick={clearErrors} disabled={busy}
+          title="Alle Fehlerzähler im Gerät auf null setzen">Zurücksetzen</button>
+      {/if}
+    </div>
+    {#if clearError}<p class="err small">{clearError}</p>{/if}
     {#if d.errors.length}
       <table class="errs"><tbody>
         {#each d.errors as [code, n]}<tr><td class="num">{n}×</td><td>{errorName(code)}</td><td class="muted num">{code}</td></tr>{/each}
@@ -180,6 +197,9 @@
   .acts button { display: inline-flex; align-items: center; gap: .4rem; }
   .tiles { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); margin-bottom: .75rem; align-items: start; }
   .tile { padding: .9rem 1rem; display: grid; gap: .6rem; align-content: start; }
+  .tilehead { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .tilehead h3 { margin: 0; }
+  .err { color: var(--err); margin: 0; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1.25rem; margin: 0; }
   dt { color: var(--muted); }
   dd { margin: 0; }
