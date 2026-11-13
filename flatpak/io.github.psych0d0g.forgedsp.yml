@@ -1,0 +1,28 @@
+# Flatpak of the desktop app, built from the .deb of the Tauri build (see .github/workflows/desktop.yml).
+app-id: io.github.psych0d0g.forgedsp
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: forge-dsp
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --device=all          # serial ports (/dev/ttyUSB*, /dev/ttyACM*)
+  - --share=network       # firmware releases from GitHub
+  - --filesystem=home     # "Speichern unter"
+modules:
+  - name: forge-dsp
+    buildsystem: simple
+    sources:
+      - type: file
+        path: forge-dsp.deb
+      - type: file
+        path: io.github.psych0d0g.forgedsp.desktop
+    build-commands:
+      - ar -x forge-dsp.deb
+      - tar -xf data.tar.*
+      - install -Dm755 usr/bin/forge-dsp /app/bin/forge-dsp
+      - install -Dm644 usr/share/icons/hicolor/128x128/apps/forge-dsp.png /app/share/icons/hicolor/128x128/apps/io.github.psych0d0g.forgedsp.png
+      - install -Dm644 io.github.psych0d0g.forgedsp.desktop /app/share/applications/io.github.psych0d0g.forgedsp.desktop

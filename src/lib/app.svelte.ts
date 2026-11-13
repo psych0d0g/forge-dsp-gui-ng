@@ -2,6 +2,8 @@
 import { ForgeClient, type Answer, type Value } from "./protocol";
 import type { ByteLink, Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
+import { autoPort, openNativeSerial, portsNative, type PortInfo } from "./transport/native";
+import { isNative } from "./native";
 import { openWebSocket } from "./transport/websocket";
 import { applyAnswer, emptyState, inputDefaultName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
@@ -40,6 +42,24 @@ function attach(t: Transport) {
   app.transportName = t.name;
 }
 
+// --- USB: Web Serial in the browser, the app's own serial port in the desktop app ----------------------
+/** port choice of the desktop app, shown by App.svelte (PortPicker) */
+export const portChoice = $state<{ ports: PortInfo[] | null; resolve: ((p: PortInfo | null) => void) | null }>({ ports: null, resolve: null });
+export async function refreshPorts() { if (portChoice.resolve) portChoice.ports = await portsNative(); }
+async function openUsb() {
+  if (!isNative()) return openWebSerial();
+  const ports = await portsNative();
+  let p = autoPort(ports);
+  if (!p) {
+    p = await new Promise<PortInfo | null>((resolve) => { portChoice.ports = ports; portChoice.resolve = resolve; });
+    portChoice.ports = null; portChoice.resolve = null;
+  }
+  if (!p) throw new Error("Kein Anschluss gewählt.");
+  return openNativeSerial(p.name);
+}
+/** USB is possible: Web Serial in the browser, always in the desktop app */
+export const usbAvailable = () => isNative() || (typeof navigator !== "undefined" && "serial" in navigator);
+
 export async function connect(kind: "usb" | "esp" | "demo") {
   app.error = "";
   app.status = "connecting";
@@ -49,7 +69,7 @@ export async function connect(kind: "usb" | "esp" | "demo") {
       app.device = demoState();
       app.demo = true;
     } else {
-      attach(kind === "usb" ? await openWebSerial() : await openWebSocket());
+      attach(kind === "usb" ? await openUsb() : await openWebSocket());
       app.demo = false;
       app.status = "reading";
       app.device = await readDevice(client!, (p) => (app.progress = p));

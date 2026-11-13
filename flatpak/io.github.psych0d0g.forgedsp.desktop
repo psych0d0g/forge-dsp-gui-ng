@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Forge DSP
+Comment=Bedienoberfläche für Forge DSP und ETON CORE D8
+Exec=forge-dsp
+Icon=io.github.psych0d0g.forgedsp
+Categories=Audio;AudioVideo;Utility;
+Terminal=false

@@ -433,3 +433,40 @@ describe("master volume (#3)", () => {
     expect(s.events[58]).toBe(200);
   });
 });
+
+import { autoPort, listPorts } from "../src/lib/transport/native";
+import { releasesFromApi } from "../src/lib/boot/releases";
+
+describe("desktop app: port choice", () => {
+  const ttyS = Array.from({ length: 32 }, (_, i) => ({ name: `/dev/ttyS${i}`, vid: null, pid: null, product: null }));
+  const forge = { name: "/dev/ttyUSB0", vid: 0x10c4, pid: 0xea60, product: "CP2102 USB to UART" };
+  const other = { name: "/dev/ttyACM0", vid: 0x2e8a, pid: 0x000c, product: "Pico" };
+  it("opens the only CP2102 without asking", () => {
+    expect(autoPort([...ttyS, forge])).toBe(forge);
+    expect(autoPort([...ttyS, forge, { ...forge, name: "/dev/ttyUSB1" }])).toBeNull();
+    expect(autoPort(ttyS)).toBeNull();
+  });
+  it("shows USB ports only, the Forge first; all on request", () => {
+    expect(listPorts([...ttyS, other, forge], false).map((p) => p.name)).toEqual(["/dev/ttyUSB0", "/dev/ttyACM0"]);
+    const all = listPorts([...ttyS, other, forge], true);
+    expect(all).toHaveLength(34);
+    expect(all[2].name).toBe("/dev/ttyS0");
+    expect(all[12].name).toBe("/dev/ttyS10");
+  });
+});
+
+describe("desktop app: firmware releases from the API", () => {
+  it("lists port and original releases with the API's SHA-256", () => {
+    const rel = releasesFromApi([
+      { tag_name: "v2.1.0", name: "2.1.0", published_at: "2026-11-12T10:00:00Z", draft: false, prerelease: false, html_url: "u",
+        assets: [{ name: "b.hex", size: 2, digest: "sha256:ab" }, { name: "SHA256SUMS", size: 1 }, { name: "a.hex", size: 1, digest: null }] },
+      { tag_name: "0.0.1116000", name: null, published_at: "2026-10-01T00:00:00Z", draft: false, prerelease: false, html_url: "o",
+        assets: [{ name: "o.hex", size: 3, digest: "sha256:cd" }] },
+      { tag_name: "v9.9.9", name: "x", published_at: "2026-12-01T00:00:00Z", draft: true, prerelease: false, html_url: "d", assets: [{ name: "d.hex", size: 1 }] },
+      { tag_name: "bringup", name: "x", published_at: "2026-12-01T00:00:00Z", draft: false, prerelease: false, html_url: "d", assets: [{ name: "d.hex", size: 1 }] },
+    ]);
+    expect(rel.map((r) => r.tag)).toEqual(["v2.1.0", "0.0.1116000"]);
+    expect(rel[0].assets).toEqual([{ file: "a.hex", size: 1, sha256: "" }, { file: "b.hex", size: 2, sha256: "ab" }]);
+    expect(rel[1].original).toBe(true);
+  });
+});

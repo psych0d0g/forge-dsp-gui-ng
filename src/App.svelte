@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { app, connect, disconnect, reload, type PageId } from "./lib/app.svelte";
-  import { webSerialAvailable } from "./lib/transport/webserial";
+  import { app, connect, disconnect, portChoice, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
+  import PortPicker from "./components/PortPicker.svelte";
   import { servedByBridge } from "./lib/transport/websocket";
   import Icon from "./components/Icon.svelte";
   import VuMeter from "./components/VuMeter.svelte";
@@ -98,7 +98,7 @@
       {:else if app.status === "offline"}
         <!-- the welcome panel has the connect buttons; here only where it is not shown -->
         {#if app.page === "console"}
-          {#if webSerialAvailable()}<button class="primary" onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>{/if}
+          {#if usbAvailable()}<button class="primary" onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>{/if}
           {#if onBridge}<button onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
         {/if}
       {/if}
@@ -124,7 +124,7 @@
         <section class="panel welcome">
           <span class="logo big">F</span>
           <h2>Forge DSP einrichten</h2>
-          {#if webSerialAvailable()}
+          {#if usbAvailable()}
             <p class="muted">Forge per USB anschließen und verbinden. Die Oberfläche liest danach alle Einstellungen aus dem Gerät.</p>
             <div class="btns">
               <button class="primary" disabled={app.status !== "offline"} onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>
@@ -165,6 +165,10 @@
     <span class="right">GUI {version} ({commit})</span>
   </footer>
 </div>
+
+{#if portChoice.ports && portChoice.resolve}
+  <PortPicker ports={portChoice.ports} onpick={(p) => portChoice.resolve?.(p)} onrefresh={refreshPorts} />
+{/if}
 
 <style>
   .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem 1fr; }
