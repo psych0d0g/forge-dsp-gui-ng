@@ -13,6 +13,12 @@ jobs:
         with:
           node-version: 26
           cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/emsdk
+          key: emsdk-6.0.13
+      - name: Simulator of the firmware (tests run against it)
+        run: scripts/build-sim.sh tests/sim V40-96ELN
       - run: npm ci
       - run: npm test
       - run: npm run check

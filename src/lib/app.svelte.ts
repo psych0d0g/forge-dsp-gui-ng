@@ -5,6 +5,7 @@ import { openWebSerial } from "./transport/webserial";
 import { deviceError, explain } from "./errors";
 import { autoPort, openNativeSerial, portsNative, type PortInfo } from "./transport/native";
 import { isNative } from "./native";
+import { openSim, simFlavours } from "./transport/sim";
 import { openWebSocket } from "./transport/websocket";
 import { applyAnswer, emptyState, inputDefaultName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
@@ -61,7 +62,14 @@ async function openUsb() {
 /** USB is possible: Web Serial in the browser, always in the desktop app */
 export const usbAvailable = () => isNative() || (typeof navigator !== "undefined" && "serial" in navigator);
 
-export async function connect(kind: "usb" | "esp" | "demo") {
+/** flavours of the simulator next to the page (tools/sim of the firmware), see App.svelte */
+export const sim = $state<{ flavours: string[]; flavour: string }>({ flavours: [], flavour: "" });
+export async function findSim() {
+  sim.flavours = await simFlavours();
+  sim.flavour = sim.flavours.includes(sim.flavour) ? sim.flavour : (sim.flavours.find((f) => f === "V40-96ELN") ?? sim.flavours[0] ?? "");
+}
+
+export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
   app.error = "";
   app.status = "connecting";
   try {
@@ -70,7 +78,7 @@ export async function connect(kind: "usb" | "esp" | "demo") {
       app.device = demoState();
       app.demo = true;
     } else {
-      attach(kind === "usb" ? await openUsb() : await openWebSocket());
+      attach(kind === "usb" ? await openUsb() : kind === "sim" ? await openSim(sim.flavour) : await openWebSocket());
       app.demo = false;
       app.status = "reading";
       app.device = await readDevice(client!, (p) => (app.progress = p));

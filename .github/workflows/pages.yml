@@ -26,12 +26,18 @@ jobs:
         with:
           node-version: 26
           cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/emsdk
+          key: emsdk-6.0.13
+      - name: Simulator of the firmware (tests, and next to the page)
+        run: scripts/build-sim.sh tests/sim
       - run: npm ci
       - run: npm test
       - run: npm run check
       - run: npm run build
       - name: Only the page itself
-        run: mkdir site && cp dist/index.html site/
+        run: mkdir site && cp dist/index.html site/ && cp -r tests/sim site/sim
       - name: Firmware releases next to the page (GitHub serves release assets without CORS)
         env:
           GITHUB_TOKEN: ${{ github.token }}

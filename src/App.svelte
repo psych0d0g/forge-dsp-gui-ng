@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { app, connect, disconnect, portChoice, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
+  import { app, connect, disconnect, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
   import PortPicker from "./components/PortPicker.svelte";
   import { servedByBridge } from "./lib/transport/websocket";
   import Icon from "./components/Icon.svelte";
@@ -46,6 +46,12 @@
       await connect("demo");
       if (q.get("page")) app.page = (["inputs", "outputs"].includes(q.get("page")!) ? "mixer" : q.get("page")) as PageId;
       return;
+    }
+    void findSim();
+    if (q.has("sim")) {   // ?sim[=flavour]: straight into the simulator
+      await findSim();
+      if (q.get("sim")) sim.flavour = q.get("sim")!;
+      if (sim.flavour) { await connect("sim"); return; }
     }
     onBridge = await servedByBridge();
     if (onBridge) connect("esp");
@@ -129,6 +135,12 @@
             <div class="btns">
               <button class="primary" disabled={app.status !== "offline"} onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>
               <button disabled={app.status !== "offline"} onclick={() => connect("demo")}>Ohne Gerät ansehen</button>
+              {#if sim.flavours.length}
+                <span class="simpick"><button disabled={app.status !== "offline"} title="Die echte Firmware im Browser, ohne Gerät; Einstellungen bleiben in diesem Browser"
+                  onclick={() => connect("sim")}>Simulator</button>
+                  {#if sim.flavours.length > 1}<select bind:value={sim.flavour} aria-label="Modell des Simulators">
+                    {#each sim.flavours as f}<option value={f}>{f}</option>{/each}</select>{/if}</span>
+              {/if}
             </div>
           {:else}
             <p class="muted">Dieser Browser bietet keine serielle Schnittstelle (Web Serial). Mit einem Browser, der sie
@@ -136,6 +148,12 @@
             <div class="btns">
               {#if onBridge}<button class="primary" onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
               <button onclick={() => connect("demo")}>Ohne Gerät ansehen</button>
+              {#if sim.flavours.length}
+                <span class="simpick"><button disabled={app.status !== "offline"} title="Die echte Firmware im Browser, ohne Gerät; Einstellungen bleiben in diesem Browser"
+                  onclick={() => connect("sim")}>Simulator</button>
+                  {#if sim.flavours.length > 1}<select bind:value={sim.flavour} aria-label="Modell des Simulators">
+                    {#each sim.flavours as f}<option value={f}>{f}</option>{/each}</select>{/if}</span>
+              {/if}
             </div>
           {/if}
         </section>
@@ -171,6 +189,7 @@
 {/if}
 
 <style>
+  .simpick { display: inline-flex; gap: .4rem; align-items: center; }
   .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem 1fr; }
   .side { grid-area: side; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 3; }
   .brand { display: flex; align-items: center; gap: .6rem; padding: .95rem 1rem .6rem; font-weight: 650; letter-spacing: -.01em; }

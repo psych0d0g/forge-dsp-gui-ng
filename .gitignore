@@ -6,3 +6,6 @@ esp32/sdkconfig.*
 !esp32/sdkconfig.defaults
 __pycache__/
 *.pyc
+
+# simulator built by CI from forge-dsp-firmware tools/sim
+tests/sim/
