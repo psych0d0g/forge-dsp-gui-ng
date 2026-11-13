@@ -1,0 +1,61 @@
+{
+  "name": "forge-dsp-desktop",
+  "productName": "Forge DSP",
+  "version": "0.1.0",
+  "description": "Forge DSP GUI as a desktop app: serial ports and files without a browser",
+  "author": "forge-dsp-gui-ng",
+  "license": "MIT",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "io.github.psych0d0g.forgedsp",
+    "productName": "Forge DSP",
+    "artifactName": "forge-dsp-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "main.cjs",
+      "firmware.cjs",
+      "app/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Audio",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.music",
+      "identity": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "desktopName": "forge-dsp.desktop"
+}
