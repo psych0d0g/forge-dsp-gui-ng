@@ -8,8 +8,8 @@ import type { Value } from "../protocol/request";
  */
 export interface SdLink {
   get(reg: string): Promise<Answer[]>;
-  /** "" = ok, otherwise the error text */
-  set(reg: string, value: Value): Promise<string>;
+  /** "" = ok, otherwise the error text; timeoutMs for commands that take long (backup) */
+  set(reg: string, value: Value, timeoutMs?: number): Promise<string>;
 }
 
 export interface SdFile { name: string; size: number }

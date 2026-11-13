@@ -69,7 +69,8 @@
     navOpen = false;
   }
   const online = $derived(app.status === "online");
-  const title = $derived(app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : "Kein Gerät");
+  const title = $derived(app.bootloader ? `Forge im Bootloader${app.device.identity.model ? ` (${app.device.identity.model})` : ""}`
+    : app.bootWait ? "Warte auf den Bootloader" : app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : "Kein Gerät");
 </script>
 
 <div class="shell" class:nav-open={navOpen}>
@@ -80,6 +81,8 @@
         <h3>{g.group}</h3>
         {#each g.items as it}
           <button class="navitem" class:active={app.page === it.id} aria-current={app.page === it.id ? "page" : undefined}
+            disabled={(!!app.bootloader || app.bootWait) && it.id !== "firmware"}
+            title={app.bootloader && it.id !== "firmware" ? "Im Bootloader geht nur das Firmware-Update" : undefined}
             onclick={() => open(it.id)}>
             <Icon name={it.id} /><span>{it.label}</span>
           </button>
@@ -94,12 +97,13 @@
     <div class="device">
       <span class="dot" class:ok={online} class:busy={app.status === "connecting" || app.status === "reading"}></span>
       <div><strong>{title}</strong>
-        <span class="muted sub">{online ? `${app.transportName}${app.demo ? " (ohne Gerät)" : ""}` : app.status === "offline" ? "nicht verbunden" : "verbinde …"}</span></div>
+        <span class="muted sub">{online ? `${app.transportName}${app.demo ? " (ohne Gerät)" : ""}${app.bootloader ? `, Bootloader ${app.bootloader.version}` : ""}`
+          : app.status === "offline" ? "nicht verbunden" : "verbinde …"}</span></div>
     </div>
-    {#if online}<div class="live"><VuMeter /><MasterFader /></div>{/if}
+    {#if online && !app.bootloader}<div class="live"><VuMeter /><MasterFader /></div>{/if}
     <div class="actions">
       {#if online}
-        {#if !app.demo}<button class="ghost" title="Alles neu einlesen" onclick={reload}><Icon name="refresh" /></button>{/if}
+        {#if !app.demo && !app.bootloader}<button class="ghost" title="Alles neu einlesen" onclick={reload}><Icon name="refresh" /></button>{/if}
         <button onclick={disconnect}>Trennen</button>
       {:else if app.status === "offline"}
         <!-- the welcome panel has the connect buttons; here only where it is not shown -->
@@ -125,7 +129,7 @@
           <p class="muted num">{app.progress.current}</p>
         </section>
       </div>
-    {:else if !online && app.page !== "console"}
+    {:else if !online && app.page !== "console" && !app.bootWait}
       <div class="center">
         <section class="panel welcome">
           <span class="logo big">F</span>
@@ -201,7 +205,8 @@
   .navitem { display: flex; align-items: center; gap: .65rem; width: 100%; text-align: left; border: 0; background: none; padding: .45rem .55rem;
     border-radius: 8px; color: var(--muted); }
   .navitem span:nth-child(2) { flex: 1; }
-  .navitem:hover { color: var(--fg); }
+  .navitem:hover:not(:disabled) { color: var(--fg); }
+  .navitem:disabled { opacity: .4; cursor: not-allowed; }
   .navitem.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--fg); }
   .navitem.active :global(svg) { color: var(--accent); }
 

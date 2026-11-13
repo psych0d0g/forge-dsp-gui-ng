@@ -36,6 +36,18 @@ Browser, ohne Gerät (`src/lib/transport/sim.ts`, gebaut aus `tools/sim` der Fir
 Modell im Browser. Pegelanzeige und Bootloader gibt es dort nicht. Die Ende-zu-Ende-Tests (`tests/e2e/`) bedienen die
 gebaute Seite damit Klick für Klick, auch in Handybreite.
 
+Firmware-Update (Seite *Firmware*, nur über USB):
+- **Port-Firmware:** Der Forge geht per `system.boot` selbst in den Bootloader. Mit Karte im Forge und Firmware ab #61
+  sichert die Firmware vorher Flash, MCU-EEPROM, Preset-EEPROM und DSP-EEPROMs auf die Karte (Platz 1–9, rund 40 s).
+  Ohne Karte liest der Bootloader Flash und EEPROM als Dateien aus (rund 1,5 min).
+- **Original-Firmware (erstes Update):** Sie kann den Bootloader nicht starten. Die Seite führt durch (ausschalten, Taster
+  neben dem USB-Anschluss halten, einschalten), wartet auf den USB-Anschluss und verbindet sich mit dem Bootloader.
+- **Forge im Bootloader:** Die App erkennt ihn beim Verbinden, sperrt alle anderen Seiten und liest Flash und EEPROM
+  (Sicherung). Aus dem Image im Flash bestimmt sie, was läuft (Original/Port, Modell, PCB 3.0 oder 4.x), und lädt die
+  passende Datei des neuesten Releases vor. Hinter einem kleineren Image bleibt der Rest einer älteren Firmware im Flash
+  stehen (der Bootloader schreibt nur die Seiten des Images); erkannt wird das Image, das den Flash beginnt.
+  Der Bootloader liest das letzte EEPROM-Byte (0xFFF) nicht, die Sicherung hat 4095 Byte; das Original nutzt das Byte nicht.
+
 Die Protokoll-Logik steckt komplett in der Web-App. Der ESP32 ist nur Webserver und Brücke WebSocket ↔ UART, damit es die Logik nur einmal gibt.
 
 ## Bauen

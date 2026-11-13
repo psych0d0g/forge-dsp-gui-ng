@@ -1,8 +1,12 @@
 <script lang="ts">
   import { explain } from "../lib/errors";
   import { saveFile } from "../lib/saveFile";
-  import { app, query, reload, updateAccess } from "../lib/app.svelte";
-  import { isPort, parseScan } from "../lib/device";
+  import { app, bootReadDone, leaveBootloader, query, reload, updateAccess, waitForBootloader, withSd, type BootWaitState } from "../lib/app.svelte";
+  import { backupInfo, freeSlot, isPort, parseScan, sdBackup, sdList, sdState, type BackupInfo } from "../lib/device";
+  import { describeFlash } from "../lib/boot/identify";
+  import { isNative } from "../lib/native";
+  import { openWebSerial } from "../lib/transport/webserial";
+  import type { Transport } from "../lib/transport/types";
   import { APP_SIZE, imageKnows } from "../lib/boot/client";
   import { HexError, parseHex } from "../lib/boot/ihex";
   import { runUpdate, STEP_LABEL, UpdateError, type Step } from "../lib/boot/update";
@@ -10,9 +14,13 @@
 
   const d = $derived(app.device);
   const id = $derived(d.identity);
-  const identity = $derived(id.model && id.pcb ? `${id.model}-${id.pcb}` : "");
+  const boot = $derived(app.bootloader);
+  // identity to keep after the update; in the bootloader the one from before or from the original image
+  const identity = $derived(boot ? boot.identity : id.model && id.pcb ? `${id.model}-${id.pcb}` : "");
   const usb = $derived(!!updateAccess() && app.status === "online");
   const port = $derived(isPort(d));
+  /** the original firmware runs: the update goes through the button and a new connection (#17) */
+  const original = $derived(usb && !port && !boot && !app.demo);
 
   let file = $state<{ name: string; image: Uint8Array; sha: string } | null>(null);
   let fileError = $state("");
@@ -24,11 +32,28 @@
   let result = $state<{ ok: boolean; text: string; touched?: boolean } | null>(null);
   /** the backup of this update, kept until the page is left (offered as buttons as well) */
   let saved = $state<{ flash: Uint8Array; eeprom: Uint8Array; flashName: string; eepromName: string } | null>(null);
+  let sdNote = $state("");
 
   $effect(() => {  // the clock generator tells PCB 3.0 from 4.x, both report "96ELN-4.0"
     if (port && app.status === "online" && hasClock === null && !running)
       query("i2c.1.scan").then((a) => { const s = parseScan(a[0]?.value); if (s.length) hasClock = s.includes(0xe0) || s.includes(0xe2); });
   });
+  // in the bootloader the image in the flash tells it
+  const clock = $derived(boot?.id ? boot.id.hasClock : hasClock);
+
+  // backup on the card in the Forge (port firmware, forge-dsp-firmware#61), otherwise as files
+  let sd = $state<{ info: BackupInfo; slot: number | null } | null>(null);
+  let sdChecked = false;
+  $effect(() => {
+    if (!port || !usb || sdChecked || running) return;
+    sdChecked = true;
+    withSd(async (l) => {
+      const st = await sdState(l);
+      const info = st?.present && st.mounted ? await backupInfo(l) : null;
+      return info ? { info, slot: freeSlot(await sdList(l)) } : null;
+    }).then((r) => (sd = r)).catch(() => (sd = null));
+  });
+  const sdUsable = $derived(!!sd && sd.slot !== null);
 
   /** a .hex (from the PC or a release) as the image to write; the checks below apply to both */
   async function useHex(name: string, text: () => Promise<string>) {
@@ -64,11 +89,18 @@
     return () => { alive = false; };
   });
   const rel = $derived(releases?.find((r) => r.tag === relTag) ?? null);
-  const fitting = $derived(rel && id.model ? assetsFor(rel, id.model, id.pcb, hasClock) : []);
+  const fitting = $derived(rel && id.model ? assetsFor(rel, id.model, id.pcb, clock) : []);
   const others = $derived(rel ? rel.assets.filter((a) => !fitting.includes(a)) : []);
   $effect(() => {  // propose the file of this device whenever the release or the device changes
     rel; fitting;
     relFile = fitting[0]?.file ?? "";
+  });
+  // in the bootloader: once the flash told the device, load the file of the newest release for it
+  let autoLoaded = false;
+  $effect(() => {
+    if (!boot?.id || autoLoaded || file || relBusy || running || !rel || rel.original || !fitting.length || relFile !== fitting[0].file) return;
+    autoLoaded = true;
+    void loadRelease();
   });
   /** newest port release newer than what runs ("2.0.0-19-g…" counts as 2.0.0) */
   const newer = $derived.by(() => {
@@ -92,15 +124,16 @@
   const checks = $derived.by((): ["ok" | "warn" | "bad", string][] => {
     if (!file) return [];
     const c: ["ok" | "warn" | "bad", string][] = [];
-    if (identity) c.push(imageKnows(file.image, id.model, id.pcb)
-      ? ["ok", `Das Image kennt dieses Gerät (${identity}).`]
+    if (id.model && id.pcb) c.push(imageKnows(file.image, id.model, id.pcb)
+      ? ["ok", `Das Image kennt dieses Gerät (${id.model}-${id.pcb}).`]
       : ["warn", `Modell ${id.model} mit PCB ${id.pcb} kommt im Image nicht vor. Es ist vermutlich für ein anderes Gerät.`]);
+    else if (boot) c.push(["warn", "Das Modell ist unbekannt (im Flash keine bekannte Firmware). Bitte selbst prüfen, dass das Image zum Gerät passt."]);
     const v30 = /V30/i.test(file.name), v4x = /V4[x01]/i.test(file.name);
-    if (hasClock !== null && (v30 || v4x)) c.push(v30 === !hasClock
-      ? ["ok", `Platine passt zum Dateinamen (${hasClock ? "mit" : "ohne"} Taktgenerator).`]
-      : ["bad", `Der Dateiname nennt ${v30 ? "PCB 3.0" : "PCB 4.x"}, dieses Gerät hat ${hasClock ? "einen" : "keinen"} Taktgenerator, ist also ${hasClock ? "PCB 4.x" : "PCB 3.0"}.`]);
+    if (clock !== null && (v30 || v4x)) c.push(v30 === !clock
+      ? ["ok", `Platine passt zum Dateinamen (${clock ? "mit" : "ohne"} Taktgenerator).`]
+      : ["bad", `Der Dateiname nennt ${v30 ? "PCB 3.0" : "PCB 4.x"}, dieses Gerät hat ${clock ? "einen" : "keinen"} Taktgenerator, ist also ${clock ? "PCB 4.x" : "PCB 3.0"}.`]);
     else if (id.model === "96ELN") c.push(["warn", "96ELN mit PCB 3.0 und 4.0 melden dieselbe Kennung. Bitte selbst prüfen, dass das Image zur Platine passt."]);
-    if (/bascom|1\.11\.6000/i.test(file.name)) c.push(["warn", "Das ist die Original-Firmware. Mit ihr geht ein späteres Update nur noch mit dem Taster am Gerät, nicht mehr von hier."]);
+    if (/bascom|1\.11\.6000/i.test(file.name)) c.push(["warn", "Das ist die Original-Firmware. Mit ihr startet ein späteres Update über den Taster am Gerät (diese Seite führt dann durch)."]);
     return c;
   });
   const blocked = $derived(checks.some(([s]) => s === "bad"));
@@ -110,31 +143,83 @@
     saveFile(data as BlobPart, name);
   }
 
+  // --- the way into the bootloader from the original firmware: switch off, hold the button, switch on ---
+  let flow = $state<{ state: BootWaitState; ctl: { signal: AbortSignal; skipOff?: boolean; port?: () => Promise<Transport | null>;
+    onState(s: BootWaitState): void }; abort: AbortController } | null>(null);
+  let manual: Transport | null = null;
+  async function pickPort() {   // browsers without getPorts: the user picks the port again
+    manual = await openWebSerial().catch(() => null);
+  }
+
+  const day = () => new Date().toISOString().slice(0, 10);
+  function step(s: Step, done?: number, total?: number) {
+    const last = steps[steps.length - 1];
+    if (last?.step === s) { last.done = done; last.total = total; } else steps.push({ step: s, done, total });
+  }
+
   async function start() {
-    const io = updateAccess();
-    if (!io || !file || running) return;
-    if (!confirm(`Firmware „${file.name}“ jetzt auf den Forge schreiben?\n\nDie Musik stoppt. Währenddessen den Forge nicht ausschalten und das USB-Kabel stecken lassen.`)) return;
-    running = true; app.exclusive = true; steps = []; result = null; saved = null;
-    const day = new Date().toISOString().slice(0, 10);
+    if (!file || running || (!usb && !original)) return;
+    const msg = original
+      ? `Firmware „${file.name}“ auf den Forge schreiben?\n\nDie Original-Firmware kann den Bootloader nicht selbst starten. Gleich: Forge ausschalten, `
+        + "den Taster neben dem USB-Anschluss gedrückt halten und wieder einschalten. Diese Seite verbindet sich dann selbst."
+      : `Firmware „${file.name}“ jetzt auf den Forge schreiben?\n\nDie Musik stoppt. Währenddessen den Forge nicht ausschalten und das USB-Kabel stecken lassen.`;
+    if (!confirm(msg)) return;
+    running = true; steps = []; result = null; saved = null; sdNote = "";
+    const name = (what: string) => `forge-${identity || "unbekannt"}-${what}-${day()}.bin`;
     try {
+      if (original) {
+        step("power");
+        const abort = new AbortController();
+        flow = { state: "off", abort, ctl: { signal: abort.signal, port: async () => { const t = manual; manual = null; return t; },
+          onState: (s) => { if (flow) flow.state = s; } } };
+        const ok = await waitForBootloader(flow.ctl);
+        flow = null;
+        if (!ok) { result = { ok: false, text: "Abgebrochen." }; return; }
+      }
+      app.exclusive = true;
+      if (app.bootloader) {
+        step("read");
+        while (app.bootloader?.read) { step("read", app.bootloader.read.done, app.bootloader.read.total); await new Promise((r) => setTimeout(r, 300)); }
+        await bootReadDone();
+        const b = app.bootloader;
+        if (!b?.flash || !b.eeprom) throw new UpdateError(`Auslesen: ${b?.error || "nicht verbunden"}`, "read", false);
+        step("read", 1, 1);
+        saved = { flash: b.flash, eeprom: b.eeprom, flashName: name("flash"), eepromName: name("eeprom") };
+        download(b.flash, saved.flashName);  // the browser may block downloads that no click started: buttons below
+        download(b.eeprom, saved.eepromName);
+      }
+      let onCard = false;
+      if (backup && port && sd && sdUsable) {
+        step("sdbackup", 0, 1);
+        app.exclusive = false;   // withSd takes the port itself
+        try {
+          const r = await withSd((l) => sdBackup(l, sd!.info, (i, parts) => step("sdbackup", i, parts.length)));
+          onCard = true;
+          sdNote = `Gesichert auf der Speicherkarte im Forge, Platz ${r.slot}: ${r.parts.map((p) => p.file).join(", ")}.`;
+        } catch (e) {
+          sdNote = `Sicherung auf der Karte ging nicht (${explain(e)}). Gesichert wird stattdessen als Dateien.`;
+        }
+        app.exclusive = true;
+      }
+      const io = updateAccess();
+      if (!io) throw new Error("nicht verbunden");
       const r = await runUpdate({ ...io,
-        onStep: (step, done, total) => {
-          const last = steps[steps.length - 1];
-          if (last?.step === step) { last.done = done; last.total = total; } else steps.push({ step, done, total });
-        },
+        onStep: step,
         onBackup: (flash, eeprom) => {
-          saved = { flash, eeprom, flashName: `forge-${identity}-flash-${day}.bin`, eepromName: `forge-${identity}-eeprom-${day}.bin` };
-          download(flash, saved.flashName);  // the browser may block downloads that no click started: buttons below
+          saved = { flash, eeprom, flashName: name("flash"), eepromName: name("eeprom") };
+          download(flash, saved.flashName);
           download(eeprom, saved.eepromName);
         },
-      }, { image: file.image, backup, identity });
+      }, { image: file.image, backup: backup && !onCard && !app.bootloader, identity });
       result = { ok: true, text: `Fertig: ${r.written} Bytes geschrieben und geprüft, die neue Firmware läuft.` };
       app.exclusive = false;
+      sdChecked = false; sd = null;
       await reload();
     } catch (e) {
       const u = e instanceof UpdateError ? e : null;
       result = { ok: false, text: u ? `${STEP_LABEL[u.step]}: ${explain(u.message)}` : explain(e), touched: u?.flashTouched };
     } finally {
+      flow = null;
       running = false; app.exclusive = false;
     }
   }
@@ -153,9 +238,27 @@
     <h3>Dieses Gerät</h3>
     <dl>
       <dt>Modell</dt><dd>{id.model || "–"} <span class="muted">PCB {id.pcb || "–"}</span></dd>
-      <dt>Firmware</dt><dd class="num">{id.port ? `Port ${id.port}` : id.firmware ? `Original ${id.firmware}` : "–"}</dd>
-      {#if hasClock !== null}<dt>Taktgenerator</dt><dd>{hasClock ? "vorhanden (PCB 4.x)" : "nicht vorhanden (PCB 3.0)"}</dd>{/if}
+      {#if boot}
+        <dt>Zustand</dt><dd>im Bootloader {boot.version}</dd>
+        <dt>Im Flash</dt><dd>{#if boot.read}wird gelesen … <span class="num muted">{Math.round((100 * boot.read.done) / boot.read.total)} %</span>
+          {:else if boot.id}{describeFlash(boot.id)}{:else}<span class="bad">{boot.error || "–"}</span>{/if}</dd>
+      {:else}
+        <dt>Firmware</dt><dd class="num">{id.port ? `Port ${id.port}` : id.firmware ? `Original ${id.firmware}` : "–"}</dd>
+      {/if}
+      {#if clock !== null}<dt>Taktgenerator</dt><dd>{clock ? "vorhanden (PCB 4.x)" : "nicht vorhanden (PCB 3.0)"}</dd>{/if}
     </dl>
+    {#if boot}
+      {#if boot.read}<progress value={boot.read.done} max={boot.read.total}></progress>{/if}
+      <p class="muted small">Der Forge wartet im Bootloader, die Firmware ist nicht gestartet. Die GUI hat Flash und EEPROM als
+        Sicherung gelesen und erkennt daran, welche Datei passt.</p>
+      <div class="btns">
+        {#if boot.flash && boot.eeprom}
+          <button onclick={() => download(boot.flash!, `forge-${identity || "unbekannt"}-flash-${day()}.bin`)}>Flash speichern</button>
+          <button onclick={() => download(boot.eeprom!, `forge-${identity || "unbekannt"}-eeprom-${day()}.bin`)}>EEPROM speichern</button>
+        {/if}
+        <button disabled={running || !!boot.read} onclick={leaveBootloader}>Firmware im Flash starten</button>
+      </div>
+    {/if}
     <p class="muted small">Firmware-Dateien (<code>.hex</code>) gibt es unter
       <a href="https://github.com/psych0d0g/forge-dsp-firmware/releases" target="_blank" rel="noreferrer">forge-dsp-firmware/releases</a>.
       Dort steht auch, welche Datei zu welchem Gerät gehört.</p>
@@ -163,13 +266,30 @@
 
   <section class="panel box">
     <h3>Update</h3>
-    {#if !usb}
+    {#if flow}
+      <div class="flow" role="status">
+        {#if flow.state === "off"}
+          <p><strong>1. Forge ausschalten</strong> (Zündung bzw. Remote aus oder Strom trennen). Die Seite wartet, bis der
+            USB-Anschluss verschwindet.</p>
+          <div class="btns"><button onclick={() => (flow!.ctl.skipOff = true)}>Anschluss bleibt da – weiter</button></div>
+        {:else}
+          <p><strong>2. Taster neben dem USB-Anschluss gedrückt halten und den Forge einschalten.</strong> Den Taster halten, bis
+            hier „Bootloader verbunden“ steht. Die Seite verbindet sich selbst.</p>
+          {#if flow.state === "noBoot"}
+            <p class="warnt">Der Forge ist da, aber der Bootloader meldet sich nicht: Vermutlich ist die Firmware gestartet. Noch
+              einmal ausschalten und beim Einschalten den Taster halten.</p>
+          {:else if flow.state === "found"}<p class="ok">Bootloader verbunden.</p>{/if}
+          {#if !isNative()}<p class="muted small">Findet die Seite den Anschluss nicht von selbst (manche Browser):
+            <button class="linkish" onclick={pickPort}>Anschluss wählen</button></p>{/if}
+        {/if}
+        <div class="btns"><button class="ghost" onclick={() => flow?.abort.abort()}>Abbrechen</button></div>
+      </div>
+    {:else if !usb}
       <p class="muted">Das Update geht nur über die USB-Verbindung, nicht über die ESP32-Brücke.</p>
-    {:else if !port}
-      <p class="muted">Auf diesem Gerät läuft die Original-Firmware. Sie kann den Bootloader nicht selbst starten: Das erste Update auf
-        die Port-Firmware braucht den Taster am Gerät und das Werkzeug <code>c45b3</code> aus dem Firmware-Repository. Danach gehen
-        Updates von hier.</p>
     {:else}
+      <p class="muted" hidden={!original}>Auf diesem Gerät läuft die Original-Firmware. Sie kann den Bootloader nicht selbst starten:
+        Nach „Update starten“ führt die Seite durch (ausschalten, Taster halten, einschalten) und verbindet sich danach selbst.
+        Danach gehen Updates ohne Taster.</p>
       <div class="relwrap">
       {#if releases}
         <div class="rel">
@@ -203,12 +323,20 @@
           <dt>SHA-256</dt><dd class="num sha" title="mit SHA256SUMS des Release vergleichen">{file.sha}</dd>
         </dl>
         <ul class="checks">{#each checks as [s, t]}<li class={s}>{t}</li>{/each}</ul>
-        <label class="check"><input type="checkbox" bind:checked={backup} disabled={running} /> vorher sichern (alte Firmware und
-          Einstellungen als Dateien, dauert etwa 2 Minuten)</label>
+        {#if boot}
+          <p class="muted small">Sicherung: Flash und EEPROM wurden beim Verbinden gelesen{boot.flash ? "" : " (läuft noch)"}.</p>
+        {:else if original}
+          <p class="muted small">Sicherung: Der Bootloader liest Flash und EEPROM vor dem Schreiben (etwa 2 Minuten), danach als Dateien.</p>
+        {:else}
+          <label class="check"><input type="checkbox" bind:checked={backup} disabled={running} /> vorher sichern
+            {#if sdUsable}(auf die Speicherkarte im Forge, Platz {sd!.slot}: Firmware, Einstellungen, Presets und DSP-EEPROMs, etwa 40 s)
+            {:else}(alte Firmware und Einstellungen als Dateien, etwa 2 Minuten){#if sd && sd.slot === null} – die Karte hat schon 9
+              Sicherungen{/if}{/if}</label>
+        {/if}
         {#if needsTick && !blocked}
           <label class="check"><input type="checkbox" bind:checked={understood} disabled={running} /> Hinweise gelesen, dieses Image ist richtig</label>
         {/if}
-        <div><button class="primary" disabled={running || blocked || (needsTick && !understood)} onclick={start}>Update starten</button></div>
+        <div><button class="primary" disabled={running || blocked || (needsTick && !understood) || !!boot?.read} onclick={start}>Update starten</button></div>
       {/if}
     {/if}
 
@@ -222,6 +350,7 @@
         {/each}
       </ol>
     {/if}
+    {#if sdNote}<p class="small">{sdNote}</p>{/if}
     {#if saved}
       <div class="saved">
         <span class="muted small">Sicherung vor dem Update ({saved.flash.length + saved.eeprom.length} Bytes), bleibt bis zum Verlassen der Seite:</span>
@@ -280,6 +409,12 @@
   .steps li { color: var(--muted); }
   .steps li.now { color: var(--fg); }
   .steps progress { width: 9rem; margin: 0 .5rem; accent-color: var(--accent); vertical-align: middle; }
+  .btns { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .flow { display: grid; gap: .5rem; border: 1px solid var(--accent); border-radius: 10px; padding: .7rem .85rem; }
+  .flow p { margin: 0; }
+  .warnt { color: var(--warn); }
+  .ok { color: var(--ok); }
+  .linkish { padding: .1rem .45rem; font-size: .8rem; }
   .saved { display: grid; gap: .35rem; border-top: 1px solid var(--line); padding-top: .6rem; }
   .saved .btns { display: flex; gap: .5rem; flex-wrap: wrap; }
   .result { border: 1px solid var(--line-strong); border-radius: 10px; padding: .6rem .8rem; display: grid; gap: .3rem; }

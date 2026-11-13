@@ -16,6 +16,8 @@ export interface LineOptions {
   target?: Target;
   /** append ;XX (the firmware checks it when present) */
   checksum?: boolean;
+  /** how long the client waits for the answer (default of the client: 1.5 s) */
+  timeoutMs?: number;
 }
 
 function line(cmd: "get" | "set", reg: string, value: Value | undefined, o: LineOptions): string {

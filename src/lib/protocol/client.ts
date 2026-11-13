@@ -20,9 +20,9 @@ export class ForgeClient {
   onAnswer(fn: (a: Answer) => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   onRaw(fn: (line: string, dir: "rx" | "tx") => void) { this.rawListeners.add(fn); return () => this.rawListeners.delete(fn); }
 
-  get(reg: string, o?: LineOptions) { return this.request(getLine(reg, o), reg); }
-  set(reg: string, v: Value, o?: LineOptions) { return this.request(setLine(reg, v, o), reg); }
-  setRaw(reg: string, valueText: string, o?: LineOptions) { return this.request(setLineRaw(reg, valueText, o), reg); }
+  get(reg: string, o?: LineOptions) { return this.request(getLine(reg, o), reg, o?.timeoutMs); }
+  set(reg: string, v: Value, o?: LineOptions) { return this.request(setLine(reg, v, o), reg, o?.timeoutMs); }
+  setRaw(reg: string, valueText: string, o?: LineOptions) { return this.request(setLineRaw(reg, valueText, o), reg, o?.timeoutMs); }
   /** raw line from a console; resolves with the answers seen until quiet */
   send(line: string) { return this.request(line.endsWith("\n") ? line : line + "\r\n", "*"); }
 
@@ -34,12 +34,12 @@ export class ForgeClient {
     else for (const f of this.listeners) f(a);
   }
 
-  private request(line: string, reg: string): Promise<Answer[]> {
+  private request(line: string, reg: string, timeoutMs = this.timeoutMs): Promise<Answer[]> {
     const run = () =>
       new Promise<Answer[]>((resolve, reject) => {
         const got: Answer[] = [];
         const wild = reg.includes("*");
-        let timer = setTimeout(() => finish(new Error(`timeout: ${line.trim()}`)), this.timeoutMs);
+        let timer = setTimeout(() => finish(new Error(`timeout: ${line.trim()}`)), timeoutMs);
         const finish = (err?: Error) => {
           clearTimeout(timer);
           this.pending = null;

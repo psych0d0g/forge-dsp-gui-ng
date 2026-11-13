@@ -6,15 +6,34 @@ interface SerialPortLike {
   close(): Promise<void>;
   readable: ReadableStream<Uint8Array> | null;
   writable: WritableStream<Uint8Array> | null;
+  getInfo?(): { usbVendorId?: number; usbProductId?: number };
 }
+interface SerialLike { requestPort(): Promise<SerialPortLike>; getPorts?(): Promise<SerialPortLike[]> }
+const serialApi = () => (navigator as unknown as { serial: SerialLike }).serial;
+
+/** USB ids of the port used last: after a power cycle the Forge comes back as a new port object */
+let lastIds: { usbVendorId?: number; usbProductId?: number } | null = null;
 
 export const webSerialAvailable = () => typeof navigator !== "undefined" && "serial" in navigator;
 
-/** USB-COM of the Forge (CP2102): 38400 8N1 by default. */
-export async function openWebSerial(baudRate = 38400): Promise<Transport> {
-  const serial = (navigator as unknown as { serial: { requestPort(): Promise<SerialPortLike> } }).serial;
-  const port = await serial.requestPort();
+/**
+ * A port the browser already allowed, as it reappears after the Forge was switched off and on
+ * (the USB chip is powered by the Forge): same USB ids as last time. null while it is away.
+ */
+export async function grantedPort(): Promise<SerialPortLike | null> {
+  const ports = (await serialApi().getPorts?.().catch(() => [])) ?? [];
+  const same = ports.filter((p) => {
+    const i = p.getInfo?.() ?? {};
+    return !lastIds || (i.usbVendorId === lastIds.usbVendorId && i.usbProductId === lastIds.usbProductId);
+  });
+  return same.length === 1 ? same[0] : null;
+}
+
+/** USB-COM of the Forge (CP2102): 38400 8N1 by default. Without a port the browser asks for one. */
+export async function openWebSerial(baudRate = 38400, chosen?: SerialPortLike): Promise<Transport> {
+  const port = chosen ?? (await serialApi().requestPort());
   await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: "none" });
+  lastIds = port.getInfo?.() ?? null;
   const listeners: ((l: string) => void)[] = [];
   const split = new LineSplitter((l) => listeners.forEach((f) => f(l)));
   const reader = port.readable!.getReader();
@@ -42,7 +61,7 @@ export async function openWebSerial(baudRate = 38400): Promise<Transport> {
       await reader.cancel().catch(() => undefined);
       reader.releaseLock();
       writer.releaseLock();
-      await port.close();
+      await port.close().catch(() => undefined);   // gone already when the Forge was switched off
     },
   };
 }

@@ -3,8 +3,10 @@
 import type { ByteLink } from "../transport/types";
 import { APP_SIZE, Bootloader, EEPROM_SIZE, NoAnswer, paddedImage } from "./client";
 
-export type Step = "enter" | "connect" | "backup" | "write" | "verify" | "start" | "identity";
+export type Step = "power" | "read" | "sdbackup" | "enter" | "connect" | "backup" | "write" | "verify" | "start" | "identity";
 export const STEP_LABEL: Record<Step, string> = {
+  power: "Bootloader mit dem Taster starten", read: "Firmware und Einstellungen aus dem Gerät lesen (Sicherung)",
+  sdbackup: "Sicherung auf die Speicherkarte im Forge",
   enter: "Bootloader anfordern", connect: "Bootloader verbinden", backup: "Alte Firmware und Einstellungen sichern",
   write: "Neue Firmware schreiben", verify: "Geschriebenes prüfen", start: "Neue Firmware starten", identity: "Gerätekennung prüfen",
 };

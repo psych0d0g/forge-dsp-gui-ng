@@ -1,7 +1,9 @@
 // Application state (Svelte 5 runes): connection, device model, log, navigation.
 import { ForgeClient, type Answer, type Value } from "./protocol";
 import type { ByteLink, Transport } from "./transport/types";
-import { openWebSerial } from "./transport/webserial";
+import { grantedPort, openWebSerial } from "./transport/webserial";
+import { APP_SIZE, Bootloader, EEPROM_SIZE } from "./boot/client";
+import { identifyFlash, type FlashId } from "./boot/identify";
 import { deviceError, explain } from "./errors";
 import { autoPort, openNativeSerial, portsNative, type PortInfo } from "./transport/native";
 import { isNative } from "./native";
@@ -10,6 +12,20 @@ import { openWebSocket } from "./transport/websocket";
 import { applyAnswer, emptyState, inputDefaultName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
+
+/** in the bootloader (#17): the flash and EEPROM are read once on connecting (backup and identification) */
+export interface BootState {
+  version: string;
+  /** reading: bytes done of total; null when finished */
+  read: { done: number; total: number } | null;
+  flash: Uint8Array | null;
+  eeprom: Uint8Array | null;
+  id: FlashId | null;
+  error: string;
+  /** "MODEL-PCB" to check after the update: from the firmware before, or from an original image;
+   *  "" for a port image (its EEPROM keeps the identity it took) */
+  identity: string;
+}
 
 export type PageId = "overview" | "mixer" | "filters" | "delay" | "modc" | "presets" | "biquads"
   | "diagnose" | "firmware" | "console" | "sdcard" | "settings";
@@ -27,6 +43,10 @@ export const app = $state({
   writing: 0,
   /** the port is in use for something else (firmware update): no status reads */
   exclusive: false,
+  /** connected to the bootloader instead of a firmware (#17): only the firmware page works */
+  bootloader: null as null | BootState,
+  /** waiting for the Forge to come back in its bootloader (first update from the original firmware) */
+  bootWait: false,
 });
 
 let transport: Transport | null = null;
@@ -78,8 +98,22 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
       app.device = demoState();
       app.demo = true;
     } else {
-      attach(kind === "usb" ? await openUsb() : kind === "sim" ? await openSim(sim.flavour) : await openWebSocket());
+      const t = kind === "usb" ? await openUsb() : kind === "sim" ? await openSim(sim.flavour) : await openWebSocket();
+      attach(t);
       app.demo = false;
+      if (kind === "usb") {
+        // the bootloader instead of a firmware: still talking to it from before, or waiting at its start
+        let bl = await findBootloader(t, 0);
+        if (!bl) {
+          await t.write("\r\n");                       // end what the probe left in the line buffer
+          if (!(await firmwareAnswers())) bl = await findBootloader(t, 3000);
+          if (!bl && !(await firmwareAnswers())) throw new Error("Kein Forge antwortet an diesem Anschluss.");
+        }
+        if (bl) {
+          await bootloaderMode(bl);
+          return;
+        }
+      }
       app.status = "reading";
       app.device = await readDevice(client!, (p) => (app.progress = p));
       await readMaster();
@@ -98,6 +132,7 @@ export async function disconnect() {
   await transport?.close().catch(() => undefined);
   transport = null;
   client = null;
+  app.bootloader = null;
   app.status = "offline";
   app.progress = null;
   app.demo = false;
@@ -107,11 +142,150 @@ export async function disconnect() {
 
 export async function reload() {
   if (!client || app.demo) return;
+  app.bootloader = null;   // a firmware runs again (after an update)
   app.status = "reading";
   app.device = await readDevice(client, (p) => (app.progress = p));
   await readMaster();
   app.progress = null;
   app.status = "online";
+}
+
+// --- bootloader (#17) -----------------------------------------------------------------------------
+/** the identity the device reported before it went into the bootloader (not readable there) */
+let lastIdentity = { keyInfo: "", model: "", pcb: "" };
+async function firmwareAnswers(): Promise<boolean> {
+  for (let i = 0; i < 2; i++) {
+    const r = await client?.get("system.firmware").catch(() => []) ?? [];
+    if (r.length) return true;
+  }
+  return false;
+}
+/** the bootloader on this port: already in contact (400 ms), or waiting at its start (autobaud for burstMs) */
+async function findBootloader(t: Transport, burstMs: number): Promise<Bootloader | null> {
+  if (!t.bytes) return null;
+  try {
+    await new Bootloader(t.bytes, 400).bootloaderVersion();
+    return new Bootloader(t.bytes);
+  } catch { /* no frame back */ }
+  if (!burstMs) return null;
+  const bl = new Bootloader(t.bytes);
+  return (await bl.connect(burstMs)) ? bl : null;
+}
+async function bootloaderMode(bl: Bootloader) {
+  const v = await bl.bootloaderVersion();
+  const st = emptyState();
+  Object.assign(st.identity, lastIdentity);
+  app.device = st;
+  const total = APP_SIZE + EEPROM_SIZE;
+  app.bootloader = { version: `${v[0]}.${v[1]}`, read: { done: 0, total }, flash: null, eeprom: null, id: null, error: "",
+    identity: lastIdentity.model && lastIdentity.pcb ? `${lastIdentity.model}-${lastIdentity.pcb}` : "" };
+  app.page = "firmware";
+  app.progress = null;
+  app.status = "online";
+  lastIdentity = { keyInfo: "", model: "", pcb: "" };
+  void readBoot(bl, app.bootloader, total);   // in the background, the page shows the progress
+}
+async function readBoot(bl: Bootloader, b: BootState, total: number) {
+  app.exclusive = true;
+  try {
+    const flash = await bl.readFlash(0, APP_SIZE, (d) => (b.read = { done: d, total }));
+    const eeprom = await bl.readEeprom(0, EEPROM_SIZE, (d) => (b.read = { done: APP_SIZE + d, total }));
+    const id = identifyFlash(flash);
+    Object.assign(b, { flash, eeprom, id, read: null });
+    if (!app.device.identity.model && id.model) {
+      Object.assign(app.device.identity, { model: id.model, pcb: id.pcb });
+      if (id.kind === "original") b.identity = `${id.model}-${id.pcb}`;
+    }
+  } catch (e) {
+    b.error = explain(e);
+    b.read = null;
+  } finally {
+    app.exclusive = false;
+  }
+}
+/** resolves when the read-out of the bootloader mode is finished (at once outside it) */
+export async function bootReadDone(): Promise<void> {
+  while (app.bootloader?.read) await new Promise((r) => setTimeout(r, 200));
+}
+/** leave the bootloader: the firmware in the flash starts, then everything is read in */
+export async function leaveBootloader() {
+  const t = transport;
+  if (!t?.bytes || !app.bootloader) return;
+  await new Bootloader(t.bytes).startApplication();
+  app.bootloader = null;
+  app.status = "reading";
+  await new Promise((r) => setTimeout(r, 3000));
+  try {
+    for (let i = 0; i < 20 && !(await firmwareAnswers()); i++) await new Promise((r) => setTimeout(r, 500));
+    await reload();
+  } catch (e) {
+    app.error = explain(e);
+    await disconnect();
+  }
+}
+
+/** the USB port of the Forge, if it is there; without asking (allowed before / the only CP2102) */
+async function reopenUsb(): Promise<Transport | null> {
+  try {
+    if (isNative()) {
+      const p = autoPort(await portsNative());
+      return p ? await openNativeSerial(p.name) : null;
+    }
+    const p = await grantedPort();
+    return p ? await openWebSerial(38400, p) : null;
+  } catch {
+    return null;   // still enumerating, or taken by another program
+  }
+}
+async function usbPresent(): Promise<boolean> {
+  return isNative() ? !!autoPort(await portsNative().catch(() => [])) : !!(await grantedPort());
+}
+
+export type BootWaitState = "off" | "on" | "found" | "noBoot";
+/**
+ * First update from the original firmware (#17): it cannot start the bootloader itself. The port
+ * is closed, the user switches the Forge off (its USB chip goes with it), holds the button and
+ * switches it on again; the port is opened as soon as it is back and the bootloader is called
+ * (autobaud) until it answers. ctl.skipOff: the port did not go away (go on anyway);
+ * ctl.port: a port the user picked by hand (browsers without getPorts).
+ */
+export async function waitForBootloader(ctl: { signal: AbortSignal; onState(s: BootWaitState): void; skipOff?: boolean;
+  port?: () => Promise<Transport | null> }): Promise<boolean> {
+  lastIdentity = { keyInfo: app.device.identity.keyInfo, model: app.device.identity.model, pcb: app.device.identity.pcb };
+  app.bootWait = true;
+  app.exclusive = true;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await transport?.close().catch(() => undefined);
+    transport = null; client = null;
+    app.status = "connecting";
+    ctl.onState("off");
+    while (!ctl.signal.aborted && !ctl.skipOff && (await usbPresent())) await sleep(300);
+    ctl.onState("on");
+    let since = Date.now();
+    while (!ctl.signal.aborted) {
+      const t = (await ctl.port?.()) ?? (await reopenUsb());
+      if (!t) { await sleep(300); continue; }
+      attach(t);
+      const bl = new Bootloader(t.bytes!);
+      if (await bl.connect(1500)) {
+        ctl.onState("found");
+        await bootloaderMode(bl);
+        return true;
+      }
+      // the port is there but no bootloader: the firmware started (button not held); keep trying
+      if (Date.now() - since > 6000) ctl.onState("noBoot");
+      await t.close().catch(() => undefined);
+      transport = null; client = null;
+      if (!(await usbPresent())) { since = Date.now(); ctl.onState("on"); }
+      await sleep(300);
+    }
+    return false;
+  } finally {
+    app.bootWait = false;
+    app.exclusive = false;
+    if (!app.bootloader) await disconnect();
+  }
 }
 
 // --- master volume (GUI-#3): the event values of the MODC volume block -------------------------------
@@ -252,8 +426,8 @@ export async function withSd<T>(fn: (l: SdLink) => Promise<T>): Promise<T> {
   if (!c) throw new Error("nicht verbunden");
   const link: SdLink = {
     get: (reg) => c.get(reg),
-    async set(reg, value) {
-      const r = await c.set(reg, value, { checksum: true });
+    async set(reg, value, timeoutMs) {
+      const r = await c.set(reg, value, { checksum: true, timeoutMs });
       const bad = r.find((a) => a.kind === "error");
       return bad ? deviceError(bad) : r.some((a) => a.kind === "info") ? "" : "keine Antwort";
     },
@@ -342,7 +516,7 @@ function isPollLine(text: string) {
 
 async function poll() {
   const c = client;
-  if (!c || polling || app.status !== "online" || app.writing > 0 || app.exclusive) return;
+  if (!c || polling || app.status !== "online" || app.writing > 0 || app.exclusive || app.bootloader) return;
   if (typeof document !== "undefined" && document.hidden) return;
   tick++;
   const regs: string[] = [];

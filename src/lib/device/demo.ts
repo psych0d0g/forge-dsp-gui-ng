@@ -80,12 +80,14 @@ export class DemoCard {
     ["FORGE.LOG", demoLog()]]);
   private open: { name: string; mode: 1 | 2; block: number; data: number[] } | null = null;
   line(kind: string, reg: string, line: string): string {
-    const val = /=(.*?)(;[0-9A-F]{2})?$/.exec(line)?.[1] ?? "";
+    line = line.trimEnd();   // the transport hands in the line with CR LF
+    const val = /=(.*?)(;[0-9A-Fa-f]{2})?$/.exec(line)?.[1] ?? "";
     const str = val.replace(/^"|"$/g, "");
     const ok = ` *.1 ${reg} ok`, bad = ` !.1 ${reg} unknown command`;
     const word = reg.split(".")[2] ?? "";
     if (kind === "get") {
       if (reg === "system.sd") return ` <.1 system.sd=[1,1,3,30424]`;
+      if (reg === "system.sd.backup") return ` <.1 system.sd.backup=[${DEMO_BACKUP.join(",")}]`;  // forge-dsp-firmware#61
       if (reg === "system.sd.files") return ` <.1 system.sd.files=[${[...this.files].map(([n, d]) => `"${n}:${d.length}"`).join(",")}]`;
       if (word === "read" && this.open?.mode === 1) {
         const d = this.files.get(this.open.name)!;
@@ -113,10 +115,22 @@ export class DemoCard {
         this.open = null;
         return ok;
       case "delete": return this.files.delete(name) ? ok : bad;
+      case "backup": {  // set system.sd.backup.<part>=slot: a file of the size of the part
+        const part = reg.split(".")[3] ?? "", slot = Number(val);
+        if (!(slot >= 1 && slot <= 9)) return ` !.1 ${reg} command out of range`;
+        const sizes: Record<string, [string, number]> = { flash: ["FLASH", DEMO_BACKUP[0]], eeprom: ["EEPROM", DEMO_BACKUP[1]],
+          preset: ["PRESET", DEMO_BACKUP[2]], 1: ["DSP1", 65536], 2: ["DSP2", 65536], 3: ["DSP3", 65536] };
+        if (!sizes[part]) return bad;
+        this.files.set(`${sizes[part][0]}_${slot}.BIN`, new Uint8Array(sizes[part][1]));
+        return ok;
+      }
     }
     return bad;
   }
 }
+
+/** flash, MCU EEPROM, preset EEPROM, DSP cores as get system.sd.backup reports them */
+const DEMO_BACKUP = [262144, 4096, 65536, 3];
 
 export class DemoTransport implements Transport {
   name = "Demo";
