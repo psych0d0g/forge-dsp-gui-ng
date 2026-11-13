@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, inName, outName, type PageId } from "../lib/app.svelte";
+  import { app, inName, meter, outName, setVuFloor, VU_FLOORS, type PageId } from "../lib/app.svelte";
   import { INPUT_PAIRS, rawToDb } from "../lib/device";
   import Icon from "../components/Icon.svelte";
   import LevelBar from "../components/LevelBar.svelte";
@@ -35,6 +35,14 @@
     <h2>{id.model ? `Forge DSP ${id.model}` : "Übersicht"}</h2>
     <p class="muted">Der Signalweg von links nach rechts. Ein Klick auf eine Stufe öffnet sie.</p>
   </div>
+  {#if d.vu}
+    <label class="floor muted">Pegelanzeige ab
+      <select value={meter.floor} onchange={(e) => setVuFloor(Number((e.target as HTMLSelectElement).value))}
+        title="Ab welchem Pegel die Balken anfangen. Tiefer zeigt auch leise Signale und Rauschen, etwa zum Einstellen der Gain-Regler an den Analogeingängen.">
+        {#each VU_FLOORS as f}<option value={f}>{f} dBFS</option>{/each}
+      </select>
+    </label>
+  {/if}
 </header>
 
 <div class="flow">
@@ -47,7 +55,7 @@
         <div class="levels">
           {#each INPUT_PAIRS as p}
             {#each p.in as n}
-              <span class="lv-n">{inName(n)}</span><LevelBar value={d.vu[n - 1]} label={inName(n)} />
+              <span class="lv-n">{inName(n)}</span><LevelBar value={d.vu[n - 1]} label={inName(n)} number />
             {/each}
           {/each}
         </div>
@@ -94,8 +102,12 @@
 </div>
 
 <style>
-  .head { margin-bottom: 1rem; }
-  .flow { display: grid; grid-template-columns: repeat(4, minmax(8.5rem, 1fr) 1.5rem) minmax(15rem, 2.2fr); align-items: stretch; }
+  .head { margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .floor { display: inline-flex; align-items: center; gap: .5rem; font-size: .82rem; }
+  .floor select { font: inherit; padding: .25rem .4rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
+  .levels :global(.wrap) { min-width: 0; }
+  /* the inputs are wider: their level bars are used to set the analog gain pots */
+  .flow { display: grid; grid-template-columns: minmax(13rem, 1.6fr) 1.5rem repeat(3, minmax(7.5rem, .8fr) 1.5rem) minmax(17rem, 2.4fr); align-items: stretch; }
   .stage { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; padding: .9rem 1rem; text-align: left; font: inherit; }
   .stage:hover:not(:disabled) { border-color: var(--accent); background: var(--panel); }
   .ico { color: var(--accent); margin-bottom: .35rem; }
@@ -110,7 +122,7 @@
   .chan .lvl { flex-basis: 100%; padding: .05rem 0 .25rem 1rem; }
   /* mute acts in the DAC, after the measuring point: the level is there but not audible */
   .chan.muted .lvl { opacity: .3; }
-  .levels { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: .2rem .5rem; width: 100%; margin-top: .45rem; }
+  .levels { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: .2rem .5rem; width: 100%; margin-top: .45rem; }
   .lv-n { font-size: .7rem; color: var(--muted); white-space: nowrap; }
   .chan.muted .v { color: var(--err); }
   .tiles { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); margin-top: .75rem; }

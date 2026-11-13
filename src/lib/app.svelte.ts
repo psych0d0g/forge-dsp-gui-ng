@@ -154,6 +154,22 @@ export async function setPoolLengths(core: number, lengths: number[], step: (tex
   }
 }
 
+// --- level meter range ------------------------------------------------------------------------------
+/** where the level bars start, dBFS; per browser. Lower values show quiet signals and noise, e.g.
+ * to set the analog input gain pots of the Forge by the meter. */
+export const VU_FLOORS = [-60, -80, -100, -120] as const;
+function loadFloor(): number {
+  try {
+    const v = Number(localStorage.getItem("vuFloor"));
+    return (VU_FLOORS as readonly number[]).includes(v) ? v : -60;
+  } catch { return -60; }
+}
+export const meter = $state({ floor: typeof window === "undefined" ? -60 : loadFloor() });
+export function setVuFloor(v: number) {
+  meter.floor = v;
+  try { localStorage.setItem("vuFloor", String(v)); } catch { /* private mode: only this session */ }
+}
+
 // --- files on the microSD (forge-dsp-firmware#59) --------------------------------------------------
 let sdBusy = false;
 /**

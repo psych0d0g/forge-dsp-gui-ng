@@ -124,7 +124,9 @@ export class DemoTransport implements Transport {
     if (m[1] === "get" && m[3] === "system.vu") {  // music-like movement on the digital input
       const t = Date.now() / 1000;
       const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));
-      out = ` <.1 system.vu=[0,0,0,0,0,0,${l},${l - 3 + Math.round(3 * Math.sin(t * 5))}]`;
+      // open analog inputs rustle like on the DEV unit (-50 … -105 dBFS), the digital one plays
+      const n = [117, 78, 110, 152, 40, 72].map((v) => v + Math.round(3 * Math.sin(t * 7 + v))).join(",");
+      out = ` <.1 system.vu=[${n},${l},${l - 3 + Math.round(3 * Math.sin(t * 5))}]`;
     } else if (m[1] === "get" && m[3] === "system.vu.out") {  // follows the input, per output a fixed gain
       const t = Date.now() / 1000;
       const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));
