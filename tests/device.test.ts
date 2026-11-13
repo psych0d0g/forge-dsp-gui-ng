@@ -113,6 +113,15 @@ describe("readDevice", () => {
 });
 
 describe("applyAnswer", () => {
+  it("keeps input and output levels apart (forge-dsp-firmware#52)", () => {
+    const s = emptyState();
+    const ap = (l: string) => applyAnswer(s, parseAnswer(l)!);
+    expect(ap(" <.1 system.vu=[0,0,0,0,0,0,162,202]")).toBe(true);
+    expect(ap(" <.1 system.vu.out=[190,150,191,151,190,150,191,152]")).toBe(true);
+    expect(s.vu).toEqual([0, 0, 0, 0, 0, 0, 162, 202]);
+    expect(s.vuOut).toEqual([190, 150, 191, 151, 190, 150, 191, 152]);
+    expect(ap(" <.1 system.vu.x=[1]")).toBe(false);
+  });
   it("takes single values and events into the state", () => {
     const s = emptyState();
     const ap = (l: string) => applyAnswer(s, parseAnswer(l)!);

@@ -90,6 +90,8 @@ export interface DeviceState {
   /** input levels in1..in8 in the gain scale (255 = 0 dBFS RMS, 0.5 dB per step); null = the
    * firmware has no system.vu (forge-dsp-firmware#52) */
   vu: number[] | null;
+  /** output levels 1..8, same scale (system.vu.out, forge-dsp-firmware#52); null = not available */
+  vuOut: number[] | null;
   /** MCU temperature in °C */
   temperature: number | null;
 }
@@ -118,6 +120,7 @@ export function emptyState(): DeviceState {
     clickless: null,
     supply: null,
     vu: null,
+    vuOut: null,
     temperature: null,
   };
 }
@@ -215,6 +218,7 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
           return true;
         case "vu":
           if (p.length === 2) { s.vu = nums(v); return true; }
+          if (p.length === 3 && p[2] === "out") { s.vuOut = nums(v); return true; }
           return false;
         case "supply":
           if (p.length === 2) { s.supply = v; return true; }

@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { app, outName, type PageId } from "../lib/app.svelte";
-  import { rawToDb } from "../lib/device";
+  import { app, inName, outName, type PageId } from "../lib/app.svelte";
+  import { INPUT_PAIRS, rawToDb } from "../lib/device";
   import Icon from "../components/Icon.svelte";
+  import LevelBar from "../components/LevelBar.svelte";
 
   const d = $derived(app.device);
   const id = $derived(d.identity);
@@ -42,6 +43,15 @@
       <span class="ico"><Icon name={s.icon} size={20} /></span>
       <strong>{s.title}</strong>
       {#each s.lines as l}{#if l}<span class="muted">{l}</span>{/if}{/each}
+      {#if s.title === "Eingänge" && d.vu}
+        <div class="levels">
+          {#each INPUT_PAIRS as p}
+            {#each p.in as n}
+              <span class="lv-n">{inName(n)}</span><LevelBar value={d.vu[n - 1]} label={inName(n)} />
+            {/each}
+          {/each}
+        </div>
+      {/if}
     </button>
     <span class="arrow" aria-hidden="true"></span>
   {/each}
@@ -54,6 +64,7 @@
           <span class="n num">{i + 1}</span>
           <span class="nm">{outName(i + 1)}</span>
           <span class="v num">{d.mute[i] ? "stumm" : `${db(raw)} dB`}</span>
+          {#if d.vuOut}<span class="lvl"><LevelBar value={d.vuOut[i]} label={d.mute[i] ? `${outName(i + 1)} (stumm, Pegel vor dem DAC)` : outName(i + 1)} /></span>{/if}
         </div>
       {/each}
     </div>
@@ -95,6 +106,12 @@
   .chan .n { color: var(--faint); }
   .chan .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chan .v { color: var(--muted); }
+  .chan { flex-wrap: wrap; }
+  .chan .lvl { flex-basis: 100%; padding: .05rem 0 .25rem 1rem; }
+  /* mute acts in the DAC, after the measuring point: the level is there but not audible */
+  .chan.muted .lvl { opacity: .3; }
+  .levels { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: .2rem .5rem; width: 100%; margin-top: .45rem; }
+  .lv-n { font-size: .7rem; color: var(--muted); white-space: nowrap; }
   .chan.muted .v { color: var(--err); }
   .tiles { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); margin-top: .75rem; }
   .tile { padding: .9rem 1rem; }

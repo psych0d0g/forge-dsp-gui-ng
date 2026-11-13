@@ -224,6 +224,8 @@ async function poll() {
   tick++;
   const regs: string[] = [];
   if (app.device.vu !== null) regs.push("system.vu");
+  // output levels only while the overview shows them (each read is two more DSP accesses)
+  if (app.device.vuOut !== null && app.page === "overview") regs.push("system.vu.out");
   if (tick % STATUS_EVERY === 0)
     for (const r of STATUS_REGS) if (!r.port || isPort(app.device)) regs.push(r.reg);
   if (!regs.length) return;

@@ -42,6 +42,7 @@ const STEPS: { reg: string; port?: boolean; slow?: boolean }[] = [
   { reg: "biquad.clickless", port: true },
   { reg: "system.supply", port: true },
   { reg: "system.vu", port: true },
+  { reg: "system.vu.out", port: true },
   { reg: "modc.version.attributes" },
   { reg: "modc.*" },
   { reg: "mixer.*", slow: true },

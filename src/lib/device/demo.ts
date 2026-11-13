@@ -54,6 +54,7 @@ export function demoState(): DeviceState {
   s.supply = [3320, 13800];
   s.temperature = 38.5;
   s.vu = [0, 0, 0, 0, 0, 0, 215, 213];
+  s.vuOut = [200, 197, 196, 193, 180, 178, 150, 148];
   return s;
 }
 
@@ -73,6 +74,10 @@ export class DemoTransport implements Transport {
       const t = Date.now() / 1000;
       const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));
       out = ` <.1 system.vu=[0,0,0,0,0,0,${l},${l - 3 + Math.round(3 * Math.sin(t * 5))}]`;
+    } else if (m[1] === "get" && m[3] === "system.vu.out") {  // follows the input, per output a fixed gain
+      const t = Date.now() / 1000;
+      const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));
+      out = ` <.1 system.vu.out=[${[-14, -17, -18, -21, -34, -36, -64, -66].map((g) => Math.max(0, l + g)).join(",")}]`;
     } else if (m[1] === "get" && m[3] === "system.temperature.celsius") out = " <.1 system.temperature.celsius=38.50";
     else if (m[1] === "get") {
       const fixed: Record<string, string> = {
