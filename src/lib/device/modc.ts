@@ -10,7 +10,8 @@ export type Field =
   | { kind: "byte"; of: "sets" | "flags"; i: number; label: string; mul?: number; unit?: string; hint?: string }
   /** 16 bits over two bytes, low byte at i; div: shown as value / div */
   | { kind: "word"; of: "sets"; i: number; label: string; signed?: boolean; div?: number; unit?: string; min?: number; max?: number; hint?: string }
-  | { kind: "choice"; of: "sets" | "flags"; i: number; label: string; options: string[]; first?: number }
+  /** a value from a list; shift/width: only these bits of the byte (the others stay), first: value of options[0] */
+  | { kind: "choice"; of: "sets" | "flags"; i: number; label: string; options: string[]; first?: number; shift?: number; width?: number; hint?: string }
   /** ticks for the bits of one byte; bits[n] = label of bit n, "" = not used */
   | { kind: "bits"; of: "sets" | "flags"; i: number; label: string; bits: string[] };
 
@@ -95,9 +96,23 @@ export const MODC_TYPES: ModcType[] = [
       { kind: "choice", of: "sets", i: 3, label: "Taktrate D/A-Wandler",
         options: ["49,152 MHz", "50,000 MHz", "60,000 MHz", "70,000 MHz", "73,728 MHz", "80,000 MHz", "90,000 MHz", "98,394 MHz", "100,000 MHz"] },
     ] },
-  { type: 69, name: "S/PDIF", help: "Einstellungen des Digitalempfängers." },
-  { type: 79, name: "ES9038PRO", help: "Einstellungen des D/A-Wandlers ES9038PRO." },
-  { type: 3, name: "Geräte-Sync", help: "Gleicht mehrere Forge in einer Kette ab." },
+  // firmware: modc_spdif -> ERAM CT7302_REGISTER_OPTIONS, read by ct7302.c at the start (only CT7302 boards)
+  { type: 69, name: "S/PDIF", help: "Optionen des Digitalempfängers CT7302. Wirken beim nächsten Start des Forge; nur Geräte mit CT7302 (Forge 96ELN mit PCB 3.0, ETON CORE D8, Forge 96ELN-3).",
+    fields: [{ kind: "bits", of: "flags", i: 1, label: "Optionen", bits: ["192 kHz an Koax/optisch (im Original ohne Wirkung)", "", "", "", "", "", "", "S/PDIF-Empfang mit 32 Bit"] }] },
+  // firmware: modc_ess9038pro -> set 1 = register 7 of the DAC; es90x8pro.c writes it masked with 0xE6
+  // (bits 7..5 filter shape, bits 2..1 IIR bandwidth; ES9038PRO data sheet, register 7)
+  { type: 79, name: "ES9038PRO", help: "Digitalfilter des D/A-Wandlers ES9038PRO (Forge 96ELN-3). Ausgeschaltet gilt die Vorgabe (schnell, minimalphasig). Wirkt beim nächsten Start.",
+    fields: [
+      { kind: "choice", of: "sets", i: 1, shift: 5, width: 3, label: "Filterkurve", options: ["schnell, linearphasig", "langsam, linearphasig",
+        "schnell, minimalphasig", "langsam, minimalphasig", "apodisierend, schnell, linearphasig", "Variante 5", "hybrid, schnell, minimalphasig", "Brickwall"] },
+      { kind: "choice", of: "sets", i: 1, shift: 1, width: 2, label: "IIR-Bandbreite", options: ["1,0757 fs (47,44 kHz bei 44,1 kHz)", "1,1338 fs (50 kHz)", "1,3605 fs (60 kHz)", "1,5873 fs (70 kHz)"] },
+    ] },
+  // firmware: modc_device_sync sends "event.block.<flags 1 & 3 + 1>=[ev1,ev2,ev3,ev4]" to the slave port
+  { type: 3, name: "Geräte-Sync", help: "Gibt bis zu vier Ereigniswerte an den nächsten Forge der Kette weiter (Anschluss „Slave“), bei jeder Änderung und sonst regelmäßig. Dort stehen sie im gewählten Ereignisblock.",
+    fields: [
+      { kind: "choice", of: "flags", i: 1, shift: 0, width: 2, label: "Ziel am nächsten Forge", options: ["Ereignisblock 1", "Ereignisblock 2", "Ereignisblock 3", "Ereignisblock 4"] },
+      ev(1, "Wert 1"), ev(2, "Wert 2"), ev(3, "Wert 3"), ev(4, "Wert 4"),
+    ] },
   { type: 48, name: "Logik", help: "Verknüpft bis zu vier Ereignisse: Eingänge wahlweise invertiert, dann je Maske UND- oder XOR-verknüpft; die erste Maske mit Treffer setzt den Ausgang.",
     fields: [
       ev(1, "Eingang 1"), ev(2, "Eingang 2"), ev(3, "Eingang 3"), ev(4, "Eingang 4"),
@@ -116,7 +131,19 @@ export const MODC_TYPES: ModcType[] = [
     fields: [ev(3, "Eingang"), ev(1, "Ausgabe bei „falsch“ / Vergleichswert 1"), ev(2, "Ausgabe bei „wahr“ / Vergleichswert 2"), set(3, "Konstante"),
       { kind: "bits", of: "flags", i: 1, label: "Bedingung", bits: ["Eingang ≥ Ereignis 1", "Eingang ≤ Ereignis 1", "Eingang ≥ Ereignis 2",
         "Eingang ≤ Ereignis 2", "Eingang ≥ Konstante", "Eingang ≤ Konstante"] }] },
-  { type: 53, name: "Rechner", help: "Rechnet mit Ereigniswerten." },
+  // firmware: modc_calculator. Start: event 1 or set 1 (flags 2 bit 5); steps 2..4: flags k bit 7 = on
+  // (step 2 always), bit 6 = set k instead of event k, bits 0..3 = × ÷ + − (several: in this order).
+  // 16-bit arithmetic, the output is the low byte; ÷ 0 gives 255.
+  { type: 53, name: "Rechner", help: "Rechnet aus bis zu vier Ereignissen oder Konstanten einen Wert: Start, dann Schritt 2 bis 4 der Reihe nach. Gerechnet wird mit 16 Bit, ausgegeben werden die unteren 8 Bit; geteilt durch 0 ergibt 255.",
+    fields: [
+      ev(1, "Start: Ereignis"), set(1, "Start: Konstante"),
+      { kind: "bits", of: "flags", i: 2, label: "Schritt 2 (immer aktiv)", bits: ["× (mal)", "÷ (durch)", "+ (plus)", "− (minus)", "", "Start mit der Konstante", "Konstante statt Ereignis"] },
+      ev(2, "Schritt 2: Ereignis"), set(2, "Schritt 2: Konstante"),
+      { kind: "bits", of: "flags", i: 3, label: "Schritt 3", bits: ["× (mal)", "÷ (durch)", "+ (plus)", "− (minus)", "", "", "Konstante statt Ereignis", "aktiv"] },
+      ev(3, "Schritt 3: Ereignis"), set(3, "Schritt 3: Konstante"),
+      { kind: "bits", of: "flags", i: 4, label: "Schritt 4", bits: ["× (mal)", "÷ (durch)", "+ (plus)", "− (minus)", "", "", "Konstante statt Ereignis", "aktiv"] },
+      ev(4, "Schritt 4: Ereignis"), set(4, "Schritt 4: Konstante"),
+    ] },
 ];
 export const modcType = (t: number) => MODC_TYPES.find((x) => x.type === t);
 export const modcName = (t: number) => (t === 0 ? "leer" : modcType(t)?.name ?? `Typ ${t}`);
@@ -154,4 +181,13 @@ export function wordSet(bytes: number[], i: number, v: number) {
   const w = Math.round(v) & 0xffff;
   bytes[i - 1] = w & 0xff;
   bytes[i] = w >> 8;
+}
+
+/** the value of a choice field (only its bits), and the byte with a new value in them */
+export function choiceGet(byte: number, f: { shift?: number; width?: number }): number {
+  return (byte >> (f.shift ?? 0)) & ((1 << (f.width ?? 8)) - 1);
+}
+export function choiceSet(byte: number, f: { shift?: number; width?: number }, v: number): number {
+  const sh = f.shift ?? 0, mask = ((1 << (f.width ?? 8)) - 1) << sh;
+  return ((byte & ~mask) | ((v << sh) & mask)) & 0xff;
 }

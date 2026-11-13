@@ -470,3 +470,20 @@ describe("desktop app: firmware releases from the API", () => {
     expect(rel[1].original).toBe(true);
   });
 });
+
+import { choiceGet, choiceSet } from "../src/lib/device/modc";
+
+describe("MODC fields: packed choices", () => {
+  it("reads and writes only the field's bits", () => {
+    const f = { shift: 5, width: 3 };
+    expect(choiceGet(64, f)).toBe(2);                 // ES9038PRO default: fast, minimum phase
+    expect(choiceSet(0x47, f, 7)).toBe(0xe7);         // other bits kept
+    expect(choiceSet(0xff, { shift: 1, width: 2 }, 0)).toBe(0xf9);
+    expect(choiceGet(0x83, { shift: 0, width: 2 })).toBe(3);
+    expect(choiceSet(5, {}, 300)).toBe(300 & 0xff);   // whole byte as before
+  });
+  it("every type of the firmware has a dialog now", () => {
+    for (const t of [3, 16, 17, 48, 49, 50, 51, 52, 53, 66, 68, 69, 79, 82, 84, 86, 96, 97, 106, 108, 109, 193])
+      expect(modcType(t)?.fields?.length, `type ${t}`).toBeGreaterThan(0);
+  });
+});

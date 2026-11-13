@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, writeRaw } from "../lib/app.svelte";
-  import { availableTypes, emptyModc, eventOptions, modcName, modcText, modcType, wordGet, wordSet, type Field, type Modc } from "../lib/device";
+  import { availableTypes, choiceGet, choiceSet, emptyModc, eventOptions, modcName, modcText, modcType, wordGet, wordSet, type Field, type Modc } from "../lib/device";
   import Icon from "../components/Icon.svelte";
 
   const d = $derived(app.device);
@@ -124,10 +124,10 @@
                 <span class="unit"><input class="num short" value={dec(wordGet(m.sets, f.i, f.signed) / (f.div ?? 1))} inputmode="decimal" onchange={(e) => setWord(f, e)} />
                   {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{f.hint}</em>{/if}</span></label>
             {:else if f.kind === "choice"}
-              {@const cur = m[f.of][f.i - 1] - (f.first ?? 0)}
+              {@const cur = choiceGet(m[f.of][f.i - 1], f) - (f.first ?? 0)}
               <label class="fld"><span>{f.label}</span>
-                <select value={cur} onchange={(e) => change((b) => (b[f.of][f.i - 1] = Number(e.currentTarget.value) + (f.first ?? 0)))}>
-                  {#if cur < 0 || cur >= f.options.length}<option value={cur}>Wert {m[f.of][f.i - 1]}</option>{/if}
+                <select value={cur} onchange={(e) => change((b) => (b[f.of][f.i - 1] = choiceSet(b[f.of][f.i - 1], f, Number(e.currentTarget.value) + (f.first ?? 0))))}>
+                  {#if cur < 0 || cur >= f.options.length}<option value={cur}>Wert {choiceGet(m[f.of][f.i - 1], f)}</option>{/if}
                   {#each f.options as o, k}<option value={k}>{o}</option>{/each}
                 </select></label>
             {:else if f.kind === "bits"}
