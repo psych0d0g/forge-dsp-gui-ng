@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { saveFile } from "../lib/saveFile";
   import { app, withSd } from "../lib/app.svelte";
   import { isPort, sdDelete, sdDownload, sdList, sdNameFor, sdState, sdUpload, validSdName, type SdFile, type SdState } from "../lib/device";
   import Icon from "../components/Icon.svelte";
@@ -49,11 +50,7 @@
   });
 
   function save(data: Uint8Array, name: string) {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([data.slice().buffer], { type: "application/octet-stream" }));
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    saveFile(data.slice().buffer, name);
   }
 
   const download = (f: SdFile) =>

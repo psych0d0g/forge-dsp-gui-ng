@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { saveFile } from "../lib/saveFile";
   import { app, reload, writeOnce, writeRaw } from "../lib/app.svelte";
   import { entriesToWrite, parseCfg, restorable, stateToEntries, toCfg, type Entry } from "../lib/device";
 
@@ -49,11 +50,7 @@
     const cfg = toCfg(d.identity.model, stateToEntries(d), [
       `Forge DSP ${d.identity.model}, Preset ${loaded !== null ? loaded + 1 : "?"}, ${new Date().toISOString().slice(0, 16)}`,
       `forge-dsp-gui-ng ${__APP_VERSION__} (${__APP_COMMIT__})`]);
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([cfg], { type: "text/plain" }));
-    a.download = `forge-${d.identity.model}-preset${loaded !== null ? loaded + 1 : ""}-${new Date().toISOString().slice(0, 10)}.cfg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveFile(cfg, `forge-${d.identity.model}-preset${loaded !== null ? loaded + 1 : ""}-${new Date().toISOString().slice(0, 10)}.cfg`, "text/plain");
   }
 
   let file = $state<{ name: string; model: string | null; entries: Entry[]; todo: Entry[]; refused: number } | null>(null);

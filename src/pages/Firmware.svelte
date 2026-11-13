@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { saveFile } from "../lib/saveFile";
   import { app, query, reload, updateAccess } from "../lib/app.svelte";
   import { isPort, parseScan } from "../lib/device";
   import { APP_SIZE, imageKnows } from "../lib/boot/client";
@@ -20,6 +21,8 @@
   let running = $state(false);
   let steps = $state<{ step: Step; done?: number; total?: number }[]>([]);
   let result = $state<{ ok: boolean; text: string; touched?: boolean } | null>(null);
+  /** the backup of this update, kept until the page is left (offered as buttons as well) */
+  let saved = $state<{ flash: Uint8Array; eeprom: Uint8Array; flashName: string; eepromName: string } | null>(null);
 
   $effect(() => {  // the clock generator tells PCB 3.0 from 4.x, both report "96ELN-4.0"
     if (port && app.status === "online" && hasClock === null && !running)
@@ -103,18 +106,14 @@
   const needsTick = $derived(checks.some(([s]) => s === "warn"));
 
   function download(data: Uint8Array, name: string) {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([data as BlobPart], { type: "application/octet-stream" }));
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveFile(data as BlobPart, name);
   }
 
   async function start() {
     const io = updateAccess();
     if (!io || !file || running) return;
     if (!confirm(`Firmware „${file.name}“ jetzt auf den Forge schreiben?\n\nDie Musik stoppt. Währenddessen den Forge nicht ausschalten und das USB-Kabel stecken lassen.`)) return;
-    running = true; app.exclusive = true; steps = []; result = null;
+    running = true; app.exclusive = true; steps = []; result = null; saved = null;
     const day = new Date().toISOString().slice(0, 10);
     try {
       const r = await runUpdate({ ...io,
@@ -122,7 +121,11 @@
           const last = steps[steps.length - 1];
           if (last?.step === step) { last.done = done; last.total = total; } else steps.push({ step, done, total });
         },
-        onBackup: (flash, eeprom) => { download(flash, `forge-${identity}-flash-${day}.bin`); download(eeprom, `forge-${identity}-eeprom-${day}.bin`); },
+        onBackup: (flash, eeprom) => {
+          saved = { flash, eeprom, flashName: `forge-${identity}-flash-${day}.bin`, eepromName: `forge-${identity}-eeprom-${day}.bin` };
+          download(flash, saved.flashName);  // the browser may block downloads that no click started: buttons below
+          download(eeprom, saved.eepromName);
+        },
       }, { image: file.image, backup, identity });
       result = { ok: true, text: `Fertig: ${r.written} Bytes geschrieben und geprüft, die neue Firmware läuft.` };
       app.exclusive = false;
@@ -218,6 +221,15 @@
         {/each}
       </ol>
     {/if}
+    {#if saved}
+      <div class="saved">
+        <span class="muted small">Sicherung vor dem Update ({saved.flash.length + saved.eeprom.length} Bytes), bleibt bis zum Verlassen der Seite:</span>
+        <div class="btns">
+          <button onclick={() => download(saved!.flash, saved!.flashName)}>Flash-Sicherung speichern</button>
+          <button onclick={() => download(saved!.eeprom, saved!.eepromName)}>EEPROM-Sicherung speichern</button>
+        </div>
+      </div>
+    {/if}
     {#if result}
       <div class="result" class:ok={result.ok} class:bad={!result.ok} role="status">
         <p>{result.text}</p>
@@ -267,6 +279,8 @@
   .steps li { color: var(--muted); }
   .steps li.now { color: var(--fg); }
   .steps progress { width: 9rem; margin: 0 .5rem; accent-color: var(--accent); vertical-align: middle; }
+  .saved { display: grid; gap: .35rem; border-top: 1px solid var(--line); padding-top: .6rem; }
+  .saved .btns { display: flex; gap: .5rem; flex-wrap: wrap; }
   .result { border: 1px solid var(--line-strong); border-radius: 10px; padding: .6rem .8rem; display: grid; gap: .3rem; }
   .result.ok { border-color: var(--ok); color: var(--ok); }
   .result.bad { border-color: var(--err); }

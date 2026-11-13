@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { saveFile } from "../lib/saveFile";
   import { app, query, withSd, writeOnce } from "../lib/app.svelte";
   import { chipAt, ct7302Locked, decodeLog, exportState, errorName, es9018Locked, hardwareCheck, hex2, isEeprom, isPort, LOG_FILE, LOG_FILE_BIT,
     LOG_LEVELS, LOG_OLD, logModule, logText, parseDspBoot, parseRegister, parseScan, sdDelete, sdDownload, sdList,
@@ -92,11 +93,7 @@
   });
   const saveLog = () => logRun("Lese das Log …", async () => {
     const b = await fetchLog();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([b.slice().buffer], { type: "application/octet-stream" }));
-    a.download = `forge-log-${new Date().toISOString().slice(0, 10)}.bin`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    saveFile(b.slice().buffer, `forge-log-${new Date().toISOString().slice(0, 10)}.bin`);
   });
   const clearLog = () => {
     if (!confirm("Das Log auf der Karte löschen (FORGE.LOG und FORGE.OLD)?")) return;
@@ -112,11 +109,7 @@
 
   /** the whole model as read from the device (#2) */
   function saveState() {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([exportState(app.device)], { type: "application/json" }));
-    a.download = `forge-zustand-${d.identity.model || "gerät"}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    saveFile(exportState(app.device), `forge-zustand-${d.identity.model || "gerät"}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`, "application/json");
   }
 
   // port extension: set system.errors=0 empties the counters (the original only by a factory reset)
@@ -165,11 +158,7 @@
     return L.join("\n") + "\n";  // without the serial number: reports get attached to public issues
   }
   function download() {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([report()], { type: "text/plain" }));
-    a.download = `forge-diagnose-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveFile(report(), `forge-diagnose-${new Date().toISOString().slice(0, 10)}.txt`, "text/plain");
   }
 </script>
 
