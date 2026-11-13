@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../lib/i18n/index.svelte";
   import { app, outName, setPoolLengths } from "../lib/app.svelte";
   import { checkLengths, freeOf, lastUsed, lostBands, poolCores, type PoolCore } from "../lib/device";
 
@@ -14,10 +15,10 @@
   // outputs in ascending order, the signal sums always last
   const firstCh = (k: PoolCore) => Math.min(...k.channels.map((c) => (c.ch > 30 ? 100 + c.ch : c.ch)));
   const cores = $derived(poolCores(d).sort((a, b) => firstCh(a) - firstCh(b)));
-  const name = (ch: number) => (ch === 35 ? "Summe A" : ch === 36 ? "Summe B" : outName(ch));
+  const name = (ch: number) => (ch === 35 ? t("common.sumA") : ch === 36 ? t("common.sumB") : outName(ch));
   const coreName = (k: PoolCore) => {
     const chs = k.channels.map((c) => c.ch).filter((c) => c < 30);
-    return chs.length ? `Kern ${k.core} · Ausgänge ${Math.min(...chs)}–${Math.max(...chs)}` : `Kern ${k.core} · Summen A/B`;
+    return chs.length ? t("ui.coreKOutputsB", { k: k.core, a: Math.min(...chs), b: Math.max(...chs) }) : t("ui.coreKSumsAB", { k: k.core });
   };
 
   // edited lengths per core; the device values until something is changed
@@ -77,11 +78,11 @@
     const why = checkLengths(k, l);
     if (why) { error = why; return; }
     const lost = lostBands(d, k, l);
-    const loss = lost.map((x) => `${name(x.ch)}: Band ${x.bands.join(", ")}`).join("\n");
-    if (!confirm(`Biquads von ${coreName(k)} neu verteilen?\n\n` +
+    const loss = lost.map((x) => `${name(x.ch)}: ${t("common.bandN", { n: x.bands.join(", ") })}`).join("\n");
+    if (!confirm(t("ui.reallocateBiquadsCore", { core: coreName(k) }) + "\n\n" +
       k.channels.map((c, i) => `${name(c.ch)}: ${c.len} → ${l[i]}`).join("\n") +
-      (loss ? `\n\nDiese belegten Bänder fallen weg (in allen Presets):\n${loss}` : "") +
-      `\n\nDer Forge startet dafür neu, rund 40 s ohne Ton. Die übrigen Bänder aller Presets bleiben erhalten.`)) return;
+      (loss ? "\n\n" + t("ui.theseBandsUseDropped") + "\n" + loss : "") +
+      "\n\n" + t("ui.forgeRestartsAbout40"))) return;
     error = "";
     busy = "…";
     error = await setPoolLengths(k.core, l, (t) => (busy = t));
@@ -100,23 +101,23 @@
     <div class="core">
       <div class="corehead">
         <span class="cname">{coreName(k)}</span>
-        <span class="muted small num">{k.size - free} von {k.size} verteilt{free > 0 ? `, ${free} frei` : ""}</span>
+        <span class="muted small num">{t("ui.bAllocated", { a: k.size - free, b: k.size })}{free > 0 ? `, ${t("ui.nFree", { n: free })}` : ""}</span>
       </div>
-      <div class="bar" role="group" aria-label="Aufteilung {coreName(k)}, Grenzen mit der Maus oder den Pfeiltasten verschieben">
+      <div class="bar" role="group" aria-label={t("ui.allocationCoreMoveBorders", { core: coreName(k) })}>
         {#each k.channels as c, i (c.ch)}
           {@const used = lastUsed(d, c.ch)}
           <div class="seg" class:cur={c.ch === current} class:short={used > l[i]} style="flex: {Math.max(l[i], 0)} 1 0; --c: {colorOf(c.ch)}"
-            title="{name(c.ch)}: {l[i]} Biquads, belegt bis Band {used}">
+            title={t("ui.nameNBiquadsUsed", { name: name(c.ch), n: l[i], used })}>
             <div class="usedpart" style="width: {l[i] ? Math.min(100, (100 * used) / l[i]) : 0}%"></div>
             <span class="lbl num">{name(c.ch)} · {l[i]}</span>
           </div>
           <!-- a focusable separator is a splitter (ARIA window splitter pattern) -->
           <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
           <div class="handle" class:active={drag?.k.core === k.core && drag.i === i} role="separator" aria-orientation="vertical" tabindex="0"
-            aria-valuenow={l[i]} aria-label="Grenze nach {name(c.ch)}" title="Ziehen verschiebt die Grenze (Pfeiltasten: 1, mit Umschalt: 10)"
+            aria-valuenow={l[i]} aria-label={t("ui.borderAfterName", { name: name(c.ch) })} title={t("ui.dragMoveBorderArrow")}
             onpointerdown={(e) => down(e, k, i)} onpointermove={move} onkeydown={(e) => key(e, k, i)}><i></i></div>
         {/each}
-        {#if free > 0}<div class="seg free" style="flex: {free} 1 0" title="{free} frei"></div>{/if}
+        {#if free > 0}<div class="seg free" style="flex: {free} 1 0" title={t("ui.nFree", { n: free })}></div>{/if}
       </div>
       <div class="fields">
         {#each k.channels as c, i (c.ch)}
@@ -126,13 +127,13 @@
             <label class="val num"><input value={l[i]} inputmode="numeric" disabled={!!busy} aria-label="Biquads {name(c.ch)}"
               onchange={(e) => typed(e, k, i)}
               onkeydown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); set(k, i, l[i] + (e.key === "ArrowUp" ? 1 : -1)); } }} /><span>Biquads</span></label>
-            <small>{used > l[i] ? `Band ${used} fiele weg` : `min. ${Math.max(c.min, 1)} · belegt bis ${used}`}</small>
+            <small>{used > l[i] ? t("ui.bandNWouldDropped", { n: used }) : t("ui.minMinUsedUp", { min: Math.max(c.min, 1), used })}</small>
           </div>
         {/each}
         <div class="actions">
           {#if changed(k)}
-            <button onclick={() => delete edit[k.core]} disabled={!!busy}>Zurück</button>
-            <button class="primary" onclick={() => apply(k)} disabled={!!busy || !!why} title={why || "Übernehmen (Neustart)"}>Übernehmen</button>
+            <button onclick={() => delete edit[k.core]} disabled={!!busy}>{t("ui.back")}</button>
+            <button class="primary" onclick={() => apply(k)} disabled={!!busy || !!why} title={why || t("ui.applyRestart")}>{t("ui.apply")}</button>
           {/if}
         </div>
       </div>

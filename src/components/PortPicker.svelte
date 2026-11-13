@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../lib/i18n/index.svelte";
   import { listPorts, type PortInfo } from "../lib/transport/native";
 
   // Port choice in the desktop app (the browser shows its own dialog for Web Serial).
@@ -10,26 +11,26 @@
 </script>
 
 <div class="scrim" role="presentation" onclick={() => onpick(null)}></div>
-<div class="panel picker" role="dialog" aria-modal="true" aria-label="Seriellen Anschluss wählen">
-  <h3>Anschluss wählen</h3>
+<div class="panel picker" role="dialog" aria-modal="true" aria-label={t("ui.chooseSerialPort")}>
+  <h3>{t("common.choosePort")}</h3>
   {#if shown.length}
     <ul>
       {#each shown as p (p.name)}
         <li><button onclick={() => onpick(p)}>
-          <strong>{p.product || (p.vid === null ? "Serieller Anschluss" : "USB-Seriell")}</strong>
+          <strong>{p.product || (p.vid === null ? t("ui.serialPort") : t("ui.usbSerial"))}</strong>
           <span class="muted num">{p.name}{p.vid !== null ? ` · ${hex(p.vid)}:${hex(p.pid)}` : ""}</span>
           {#if p.vid === 0x10c4}<span class="tag">Forge (CP2102)</span>{/if}
         </button></li>
       {/each}
     </ul>
   {:else}
-    <p class="muted">Kein USB-Anschluss gefunden. Ist der Forge eingeschaltet und per USB verbunden?</p>
+    <p class="muted">{t("ui.noUSBPortFound")}</p>
   {/if}
   <div class="row">
-    {#if hidden > 0}<label class="check"><input type="checkbox" bind:checked={all} /> alle Anschlüsse zeigen ({hidden} weitere)</label>{/if}
+    {#if hidden > 0}<label class="check"><input type="checkbox" bind:checked={all} /> {t("ui.showAllPortsN", { n: hidden })}</label>{/if}
     <span class="sp"></span>
-    <button class="ghost" onclick={onrefresh}>Neu suchen</button>
-    <button onclick={() => onpick(null)}>Abbrechen</button>
+    <button class="ghost" onclick={onrefresh}>{t("ui.searchAgain")}</button>
+    <button onclick={() => onpick(null)}>{t("common.cancel")}</button>
   </div>
 </div>
 

@@ -2,6 +2,7 @@
   import { app, setMaster } from "../lib/app.svelte";
   import { masterDb, masterOf, masterValue } from "../lib/device";
   import VFader from "./VFader.svelte";
+  import { t } from "../lib/i18n/index.svelte";
 
   // Master volume in the top bar (GUI-#3): the two volume events of the MODC block "Lautstärke",
   // attenuation on top of the preset like the rotary encoder; the stored levels stay as they are.
@@ -22,19 +23,19 @@
 </script>
 
 {#if m}
-  <div class="master" title="Master-Lautstärke (Steuerblock {m.block} „Lautstärke“): senkt alle Ausgänge über der gespeicherten Abstimmung ab, wie der Drehregler. Doppelklick = 0 dB.">
+  <div class="master" title={t("ui.masterVolumeControlBlock", { n: m.block })}>
     <span class="lbl">Master</span>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div ondblclick={() => put(0)}>
-      <VFader horizontal frac={db === null ? 0 : (Math.max(MIN_DB, db) - MIN_DB) / -MIN_DB} label="Master-Lautstärke" valuetext="{text} dB"
+      <VFader horizontal frac={db === null ? 0 : (Math.max(MIN_DB, db) - MIN_DB) / -MIN_DB} label={t("ui.masterVolume")} valuetext="{text} dB"
         disabled={db === null} onfrac={(f) => put(toDb(f))} onstep={(d) => db !== null && put(Math.max(MIN_DB, db + d * 0.5))} />
     </div>
-    <label class="num val"><input value={text} onchange={typed} aria-label="Master in dB" disabled={db === null} /><span>dB</span></label>
+    <label class="num val"><input value={text} onchange={typed} aria-label={t("ui.masterDB")} disabled={db === null} /><span>dB</span></label>
   </div>
 {:else if app.device.identity.firmware}
   <button class="ghost nomaster" onclick={() => (app.page = "modc")}
-    title="Für eine Master-Lautstärke unter Steuerung › Steuerblöcke einen Block „Lautstärke“ anlegen und ihm zwei Ereignisse geben (ungerade/gerade Ausgänge). Er senkt dann alle Ausgänge über der Abstimmung ab, auch per Drehregler oder Fernbedienung.">
-    Master einrichten …</button>
+    title={t("ui.masterVolumeAddVolume")}>
+    {t("ui.setUpMaster")}</button>
 {/if}
 
 <style>

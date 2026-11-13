@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.svelte";
 import { isNative, nativeGet } from "../native";
 // Firmware releases next to the page (scripts/fetch-firmware.mjs in the Pages build): GitHub serves
 // release assets without CORS headers, so the files come from the page's own origin, listed in
@@ -89,6 +90,6 @@ export async function fetchAsset(rel: Release, a: ReleaseAsset, base = RELEASE_B
     bytes = new Uint8Array(await r.arrayBuffer());
   }
   const sha = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource)));
-  if (bytes.length !== a.size || (a.sha256 && sha !== a.sha256)) throw new Error(`${a.file}: Prüfsumme stimmt nicht mit dem Release überein`);
+  if (bytes.length !== a.size || (a.sha256 && sha !== a.sha256)) throw new Error(`${a.file}: ${t("firmware.checksumDoesNotMatch")}`);
   return new TextDecoder().decode(bytes);
 }

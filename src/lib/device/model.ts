@@ -1,4 +1,5 @@
 import type { Answer } from "../protocol/answer";
+import { t, tk, tx } from "../i18n/index.svelte";
 import type { Value } from "../protocol/request";
 import { limitsOf, type Limits } from "./limits";
 
@@ -315,10 +316,12 @@ export const isPort = (s: DeviceState) => s.identity.port !== null;
  * INMI21: labels R;L;R;L…). 1..analog = analog inputs, the rest digital. */
 export const inputSide = (n: number) => (n % 2 ? "R" : "L");
 export const inputPairOf = (n: number) => Math.ceil(n / 2);
-/** default name of input n: "Eingang 2 L", "Digital R" */
+/** default name of input n: "Eingang 2 L", "Digital R" (in the language of the interface) */
 export function inputDefaultName(n: number, analog = 6): string {
-  return n <= analog ? `Eingang ${inputPairOf(n)} ${inputSide(n)}` : `Digital ${inputSide(n)}`;
+  return n <= analog ? t("device.inputN", { n: `${inputPairOf(n)} ${inputSide(n)}` }) : t("device.digitalSide", { side: inputSide(n) });
 }
+/** short caption where the group already says analog/digital: "2 L", "R" */
+export const inputShortName = (n: number, analog = 6) => (n <= analog ? `${inputPairOf(n)} ${inputSide(n)}` : inputSide(n));
 /** input numbers in display order: left before right within each pair */
 export const inputsLeftFirst = (count: number) =>
   Array.from({ length: count }, (_, i) => (i % 2 ? i : i + 2)).filter((n) => n <= count);
@@ -405,14 +408,14 @@ export const MIXER_BUS_COLUMNS = [9, 10];
 
 /** names of the input select values per model (original GUI, page_inmi21_radio_labels) */
 const SOURCES: Record<string, string[]> = {
-  "96LN": ["", "S/PDIF optisch", "S/PDIF koaxial", "Bluetooth"],
-  default: ["Bluetooth", "USB Audio", "S/PDIF optisch 1", "S/PDIF optisch 2", "S/PDIF koaxial"],
+  "96LN": ["", tk("device.sPDIFOptical"), tk("device.sPDIFCoaxial"), "Bluetooth"],
+  default: ["Bluetooth", "USB Audio", tk("device.sPDIFOptical1"), tk("device.sPDIFOptical2"), tk("device.sPDIFCoaxial")],
 };
 
 export function sourceNames(s: DeviceState): { value: number; label: string }[] {
   const names = SOURCES[s.identity.model] ?? SOURCES.default;
   const count = Math.max(names.length, s.mixer.inputMax ?? 0);
-  return Array.from({ length: count }, (_, i) => ({ value: i + 1, label: names[i] || `Quelle ${i + 1}` }));
+  return Array.from({ length: count }, (_, i) => ({ value: i + 1, label: names[i] ? tx(names[i]) : t("common.sourceN", { n: i + 1 }) }));
 }
 
 /** The signal sums ("All Over": a common path with its own filter chain in front of all outputs)

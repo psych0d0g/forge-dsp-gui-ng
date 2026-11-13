@@ -1,3 +1,4 @@
+import { t, tk, tx } from "../i18n/index.svelte";
 import { sdList, type SdFile, type SdLink } from "./sdfiles";
 
 /**
@@ -20,12 +21,12 @@ export async function backupInfo(l: SdLink): Promise<BackupInfo | null> {
 
 export function backupParts(info: BackupInfo, slot: number): BackupPart[] {
   const p: BackupPart[] = [
-    { part: "flash", label: "Firmware (Flash)", file: `FLASH_${slot}.BIN`, size: info.flash },
-    { part: "eeprom", label: "Einstellungen (MCU-EEPROM)", file: `EEPROM_${slot}.BIN`, size: info.eeprom },
+    { part: "flash", label: tk("sdcard.firmwareFlash"), file: `FLASH_${slot}.BIN`, size: info.flash },
+    { part: "eeprom", label: tk("sdcard.settingsMCUEEPROM"), file: `EEPROM_${slot}.BIN`, size: info.eeprom },
   ];
-  if (info.preset) p.push({ part: "preset", label: "Presets (Preset-EEPROM)", file: `PRESET_${slot}.BIN`, size: info.preset });
+  if (info.preset) p.push({ part: "preset", label: tk("sdcard.presetsPresetEEPROM"), file: `PRESET_${slot}.BIN`, size: info.preset });
   for (let c = 1; c <= info.cores; c++)
-    p.push({ part: String(c), label: `DSP-Kern ${c} (Programm und Biquads)`, file: `DSP${c}_${slot}.BIN`, size: 0x10000 });
+    p.push({ part: String(c), label: t("sdcard.dspCoreNProgram", { n: c }), file: `DSP${c}_${slot}.BIN`, size: 0x10000 });
   return p;
 }
 
@@ -49,18 +50,18 @@ const PART_TIMEOUT_MS = 30000;
  */
 export async function sdBackup(l: SdLink, info: BackupInfo, progress: (i: number, parts: BackupPart[]) => void = () => {}): Promise<{ slot: number; parts: BackupPart[] }> {
   const slot = freeSlot(await sdList(l));
-  if (slot === null) throw new Error("Auf der Karte liegen schon 9 Sicherungen. Bitte alte auf der Seite Speicherkarte löschen.");
+  if (slot === null) throw new Error(t("sdcard.cardAlreadyHolds9"));
   const parts = backupParts(info, slot);
   for (let i = 0; i < parts.length; i++) {
     progress(i, parts);
     const err = await l.set(`system.sd.backup.${parts[i].part}`, slot, PART_TIMEOUT_MS);
-    if (err) throw new Error(`${parts[i].label}: ${err}`);
+    if (err) throw new Error(`${tx(parts[i].label)}: ${err}`);
   }
   progress(parts.length, parts);
   const files = await sdList(l);
   for (const p of parts) {
     const f = files.find((x) => x.name.toUpperCase() === p.file);
-    if (!f || f.size !== p.size) throw new Error(`${p.file}: auf der Karte ${f?.size ?? 0} statt ${p.size} Byte`);
+    if (!f || f.size !== p.size) throw new Error(`${p.file}: ${t("sdcard.insteadBBytesCard", { a: f?.size ?? 0, b: p.size })}`);
   }
   return { slot, parts };
 }

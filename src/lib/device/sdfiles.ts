@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.svelte";
 import type { Answer } from "../protocol/answer";
 import type { Value } from "../protocol/request";
 
@@ -88,7 +89,7 @@ export async function sdDownload(l: SdLink, name: string, size: number, progress
         if (t) await l.set("system.sd.seek", block);  // the answer got lost or damaged: once more
         b = parseBlock(valueOf(await l.get("system.sd.read")), block);
       }
-      if (!b) throw new Error(`${name}: Block ${block} nicht lesbar`);
+      if (!b) throw new Error(`${name}: ${t("sdcard.blockNNotReadable", { n: block })}`);
       if (!b.length) break;
       parts.push(b);
       total += b.length;
@@ -104,7 +105,7 @@ export async function sdDownload(l: SdLink, name: string, size: number, progress
 }
 
 export async function sdUpload(l: SdLink, name: string, data: Uint8Array, progress?: (done: number) => void): Promise<void> {
-  if (!validSdName(name)) throw new Error(`${name}: kein 8.3-Dateiname`);
+  if (!validSdName(name)) throw new Error(`${name}: ${t("sdcard.not83File")}`);
   let err = await l.set("system.sd.create", name);
   if (err) throw new Error(`${name}: ${err}`);
   try {
@@ -120,7 +121,7 @@ export async function sdUpload(l: SdLink, name: string, data: Uint8Array, progre
     await l.set("system.sd.close", 1);
   }
   const f = (await sdList(l)).find((x) => x.name.toUpperCase() === name.toUpperCase());
-  if (!f || f.size !== data.length) throw new Error(`${name}: auf der Karte ${f?.size ?? 0} statt ${data.length} Byte`);
+  if (!f || f.size !== data.length) throw new Error(`${name}: ${t("sdcard.insteadBBytesCard", { a: f?.size ?? 0, b: data.length })}`);
 }
 
 export async function sdDelete(l: SdLink, name: string): Promise<void> {

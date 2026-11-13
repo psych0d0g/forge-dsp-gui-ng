@@ -9,6 +9,7 @@
 // V4x build also "CORED8\0"), the version after "system.firmware.port=\0", the licence with the
 // build date in one string ("-CCBYNCSA-20261113-MDD").
 // Which of several identities a port build took is kept in the EEPROM, so an update keeps it.
+import { t } from "../i18n/index.svelte";
 
 export interface FlashId {
   kind: "original" | "port" | "unknown" | "empty";
@@ -60,10 +61,10 @@ export function identifyFlash(flash: Uint8Array): FlashId {
   return none;
 }
 
-/** for the page: "Original 1.11.6000, 96ELN PCB 4.x" */
+/** for the page: "Original 1.11.6000, 96ELN, PCB 4.x" */
 export function describeFlash(f: FlashId): string {
-  if (f.kind === "empty") return "keine Firmware im Flash";
-  if (f.kind === "unknown") return "nicht erkannt";
+  if (f.kind === "empty") return t("firmware.noFirmwareFlash");
+  if (f.kind === "unknown") return t("firmware.notRecognised");
   const board = f.hasClock === null ? "" : f.hasClock ? ", PCB 4.x" : ", PCB 3.0";
-  return `${f.kind === "original" ? "Original" : "Port"} ${f.version || "?"}, ${f.model}${board}`;
+  return `${f.kind === "original" ? t("firmware.original") : "Port"} ${f.version || "?"}, ${f.model}${board}`;
 }

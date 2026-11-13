@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tx } from "../lib/i18n/index.svelte";
   import { app, writeRaw } from "../lib/app.svelte";
   import { availableTypes, choiceGet, choiceSet, emptyModc, eventOptions, modcName, modcText, modcType, wordGet, wordSet, type Field, type Modc } from "../lib/device";
   import Icon from "../components/Icon.svelte";
@@ -17,7 +18,7 @@
   let raw = $state(false);
   let err = $state("");
   const m = $derived(sel !== null ? d.modc[sel] : undefined);
-  const t = $derived(m ? modcType(m.type) : undefined);
+  const mt = $derived(m ? modcType(m.type) : undefined);
 
   async function send(n: number) {
     err = await writeRaw(`modc.${n}`, modcText(d.modc[n]));
@@ -36,7 +37,7 @@
     send(free);
   }
   function remove(n: number) {
-    if (!confirm(`Block ${n} (${modcName(d.modc[n].type)}) entfernen?`)) return;
+    if (!confirm(t("modc.removeBlockNName", { n, name: modcName(d.modc[n].type) }))) return;
     d.modc[n] = emptyModc();
     send(n);
     if (sel === n) sel = used.find((x) => x !== n) ?? null;
@@ -64,79 +65,79 @@
 
 <header class="head">
   <div>
-    <h2>Steuerblöcke</h2>
-    <p class="muted">Blöcke verknüpfen Ereignisse (Taster, Fernbedienung, Quellen, andere Blöcke) mit Funktionen wie Lautstärke,
-      Loudness oder Umschaltungen. {used.length} von {total} belegt.</p>
+    <h2>{t("common.controlBlocks")}</h2>
+    <p class="muted">{t("modc.blocksLinkEventsButtons")}
+      {t("modc.nMUse", { n: used.length, m: total })}</p>
   </div>
-  <button onclick={add} disabled={used.length >= total}>+ Block</button>
+  <button onclick={add} disabled={used.length >= total}>{t("modc.block")}</button>
 </header>
 
-{#if err}<div class="panel alert" role="alert">Vom Gerät abgelehnt: {err}</div>{/if}
+{#if err}<div class="panel alert" role="alert">{t("modc.refusedByDeviceErr", { err })}</div>{/if}
 
 <div class="layout">
-  <section class="panel list" aria-label="Blöcke">
+  <section class="panel list" aria-label={t("modc.blocks")}>
     {#each used as n}
       {@const b = d.modc[n]}
       <button class="item" class:on={sel === n} aria-pressed={sel === n} onclick={() => (sel = n)}>
         <span class="nr num">{n}</span>
         <span class="nm">{modcName(b.type)}</span>
-        <span class="dot" class:ok={!!b.enable} title={b.enable ? "aktiv" : "aus"}></span>
+        <span class="dot" class:ok={!!b.enable} title={b.enable ? t("common.active") : t("common.off")}></span>
       </button>
     {/each}
-    {#if !used.length}<p class="muted pad">Noch keine Blöcke.</p>{/if}
+    {#if !used.length}<p class="muted pad">{t("modc.noBlocksYet")}</p>{/if}
   </section>
 
   {#if m && sel !== null}
     <section class="panel edit">
       <div class="edithead">
         <span class="big num">{sel}</span>
-        <select value={m.type} aria-label="Typ" onchange={(e) => setType(Number(e.currentTarget.value))}>
+        <select value={m.type} aria-label={t("modc.type")} onchange={(e) => setType(Number(e.currentTarget.value))}>
           {#if !types.some((x) => x.type === m.type)}<option value={m.type}>{modcName(m.type)}</option>{/if}
-          {#each types as x}<option value={x.type}>{x.name}</option>{/each}
+          {#each types as x}<option value={x.type}>{tx(x.name)}</option>{/each}
         </select>
         <button class="sw" class:on={!!m.enable} aria-pressed={!!m.enable} onclick={() => change((b) => (b.enable = b.enable ? 0 : 1))}>
-          {m.enable ? "Aktiv" : "Aus"}</button>
-        <button class="ghost del" title="Block entfernen" aria-label="Block entfernen" onclick={() => remove(sel!)}><Icon name="close" size={16} /></button>
+          {m.enable ? t("modc.active2") : t("common.off2")}</button>
+        <button class="ghost del" title={t("modc.removeBlock")} aria-label={t("modc.removeBlock")} onclick={() => remove(sel!)}><Icon name="close" size={16} /></button>
       </div>
-      {#if t}<p class="muted">{t.help}</p>{:else}<p class="muted">Für diesen Typ sind die Felder nicht beschrieben; unten stehen die Rohwerte.</p>{/if}
-      <p class="muted small">Sein Ergebnis gibt der Block als Ereignis <span class="num">{96 + sel}</span> aus.</p>
+      {#if mt}<p class="muted">{tx(mt.help)}</p>{:else}<p class="muted">{t("modc.fieldsTypeNotDescribed")}</p>{/if}
+      <p class="muted small">{t("modc.blockOutputsItsResult", { n: 96 + sel })}</p>
 
-      {#if t?.fields && !raw}
+      {#if mt?.fields && !raw}
         <div class="fields typed">
-          {#each t.fields as f}
+          {#each mt.fields as f}
             {#if f.kind === "event"}
               {@const ev = m.events[f.i - 1]}
-              <label class="fld"><span>{f.label}</span>
+              <label class="fld"><span>{tx(f.label)}</span>
                 <span class="evt">
                   <input class="num" value={ev} inputmode="numeric" onchange={(e) => change((b) => (b.events[f.i - 1] = byte(e)))} />
-                  <select value={events.some((o) => o.value === ev) ? ev : -1} aria-label="{f.label}: Ereignis wählen"
+                  <select value={events.some((o) => o.value === ev) ? ev : -1} aria-label="{tx(f.label)}: {t("modc.chooseEvent")}"
                     onchange={(e) => change((b) => (b.events[f.i - 1] = Number(e.currentTarget.value)))}>
-                    {#if !events.some((o) => o.value === ev)}<option value={-1}>eigener Wert</option>{/if}
+                    {#if !events.some((o) => o.value === ev)}<option value={-1}>{t("modc.ownValue")}</option>{/if}
                     {#each events as o}<option value={o.value}>{o.label}</option>{/each}
                   </select>
                 </span></label>
             {:else if f.kind === "byte"}
-              <label class="fld"><span>{f.label}</span>
+              <label class="fld"><span>{tx(f.label)}</span>
                 <span class="unit"><input class="num short" value={dec(m[f.of][f.i - 1] * (f.mul ?? 1))} inputmode="decimal" onchange={(e) => setByte(f, e)} />
-                  {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{f.hint}</em>{/if}</span></label>
+                  {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{tx(f.hint)}</em>{/if}</span></label>
             {:else if f.kind === "word"}
-              <label class="fld"><span>{f.label}</span>
+              <label class="fld"><span>{tx(f.label)}</span>
                 <span class="unit"><input class="num short" value={dec(wordGet(m.sets, f.i, f.signed) / (f.div ?? 1))} inputmode="decimal" onchange={(e) => setWord(f, e)} />
-                  {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{f.hint}</em>{/if}</span></label>
+                  {#if f.unit}<i>{f.unit}</i>{/if}{#if f.hint}<em>{tx(f.hint)}</em>{/if}</span></label>
             {:else if f.kind === "choice"}
               {@const cur = choiceGet(m[f.of][f.i - 1], f) - (f.first ?? 0)}
-              <label class="fld"><span>{f.label}</span>
+              <label class="fld"><span>{tx(f.label)}</span>
                 <select value={cur} onchange={(e) => change((b) => (b[f.of][f.i - 1] = choiceSet(b[f.of][f.i - 1], f, Number(e.currentTarget.value) + (f.first ?? 0))))}>
-                  {#if cur < 0 || cur >= f.options.length}<option value={cur}>Wert {choiceGet(m[f.of][f.i - 1], f)}</option>{/if}
-                  {#each f.options as o, k}<option value={k}>{o}</option>{/each}
+                  {#if cur < 0 || cur >= f.options.length}<option value={cur}>{t("modc.valueN", { n: choiceGet(m[f.of][f.i - 1], f) })}</option>{/if}
+                  {#each f.options as o, k}<option value={k}>{tx(o)}</option>{/each}
                 </select></label>
             {:else if f.kind === "bits"}
-              <div class="fld wide"><span>{f.label}</span>
+              <div class="fld wide"><span>{tx(f.label)}</span>
                 <div class="bits">
                   {#each f.bits as l, bit}
                     {#if l}
                       <label class="check"><input type="checkbox" checked={!!(m[f.of][f.i - 1] & (1 << bit))}
-                        onchange={() => change((b) => (b[f.of][f.i - 1] ^= 1 << bit))} /> {l}</label>
+                        onchange={() => change((b) => (b[f.of][f.i - 1] ^= 1 << bit))} /> {tx(l)}</label>
                     {/if}
                   {/each}
                 </div></div>
@@ -144,9 +145,9 @@
           {/each}
         </div>
       {:else}
-        {#each [["events", "Ereignis"], ["sets", "Set"], ["flags", "Flags"]] as const as [of, name]}
+        {#each [["events", t("common.event")], ["sets", "Set"], ["flags", "Flag"]] as const as [of, name]}
           <div class="group">
-            <h3>{of === "events" ? "Ereignisse" : of === "sets" ? "Werte (Sets)" : "Flags"}</h3>
+            <h3>{of === "events" ? t("modc.events") : of === "sets" ? t("modc.valuesSets") : "Flags"}</h3>
             <div class="fields">
               {#each m[of] as v, i}
                 <label class="fld"><span>{name} {i + 1}</span>
@@ -158,12 +159,12 @@
       {/if}
 
       <div class="foot">
-        <label class="check"><input type="checkbox" bind:checked={raw} disabled={!t?.fields} /> Rohwerte zeigen (Ereignisse, Sets, Flags)</label>
+        <label class="check"><input type="checkbox" bind:checked={raw} disabled={!mt?.fields} /> {t("modc.showRawValuesEvents")}</label>
         <code class="num">modc.{sel}={modcText(m)}</code>
       </div>
     </section>
   {:else}
-    <section class="panel edit hint"><p class="muted">Links einen Block wählen oder mit „+ Block“ einen neuen anlegen.</p></section>
+    <section class="panel edit hint"><p class="muted">{t("modc.chooseBlockLeftOr")}</p></section>
   {/if}
 </div>
 

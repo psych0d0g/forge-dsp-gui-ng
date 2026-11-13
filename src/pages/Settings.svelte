@@ -1,23 +1,33 @@
 <script lang="ts">
   import { app, meter, outName, resetMeter, setMeter, setVuFloor, VU_FLOORS, type MeterSource } from "../lib/app.svelte";
+  import { i18n, LANGS, setLang, t, tk, type Lang, tx } from "../lib/i18n/index.svelte";
 
   // Settings of this GUI (stored in the browser, not in the Forge).
   const outs = $derived(Math.max(8, app.device.gain.out.length));
-  const SIDES = [{ v: 0, t: "links" }, { v: 1, t: "rechts" }, { v: -1, t: "nicht" }];
+  const SIDES = [{ v: 0, t: tk("settings.left") }, { v: 1, t: tk("settings.right") }, { v: -1, t: tk("settings.none") }];
   const setSide = (i: number, v: number) => setMeter(meter.source, meter.sides.map((x, k) => (k === i ? v : x)));
   const noOutputLevels = $derived(app.status === "online" && app.device.vuOut === null);
 </script>
 
 <header class="head">
-  <h2>Einstellungen</h2>
-  <p class="muted">Einstellungen dieser Oberfläche. Sie gelten in diesem Browser und ändern nichts im Forge.</p>
+  <h2>{t("common.settings")}</h2>
+  <p class="muted">{t("settings.settingsInterfaceTheyApply")}</p>
 </header>
 
 <section class="panel box">
-  <h3>Pegelanzeige</h3>
+  <h3>{t("common.language")}</h3>
   <label class="row">
-    <span><strong>Balken ab</strong><small class="muted">Tiefer zeigt auch leise Signale und Rauschen, etwa zum Einstellen
-      der Gain-Regler an den Analogeingängen.</small></span>
+    <span><strong>{t("settings.languageInterface")}</strong><small class="muted">{t("settings.defaultLanguageBrowser")}</small></span>
+    <select value={i18n.lang} onchange={(e) => setLang((e.target as HTMLSelectElement).value as Lang)}>
+      {#each LANGS as l}<option value={l.code}>{l.name}</option>{/each}
+    </select>
+  </label>
+</section>
+
+<section class="panel box">
+  <h3>{t("settings.levelMeter")}</h3>
+  <label class="row">
+    <span><strong>{t("settings.barsStartAt")}</strong><small class="muted">{t("settings.lowerAlsoShowsQuiet")}</small></span>
     <select value={meter.floor} onchange={(e) => setVuFloor(Number((e.target as HTMLSelectElement).value))}>
       {#each VU_FLOORS as f}<option value={f}>{f} dBFS</option>{/each}
     </select>
@@ -25,10 +35,10 @@
 </section>
 
 <section class="panel box">
-  <h3>Anzeige in der Kopfzeile</h3>
-  <div class="choice" role="radiogroup" aria-label="Quelle der Anzeige in der Kopfzeile">
-    {#each [{ v: "outputs", t: "Summe der Ausgänge", d: "Leistungssumme der Ausgänge je Seite, wie unten zugeordnet" },
-      { v: "inputs", t: "Lautestes Eingangspaar", d: "das Eingangspaar mit dem höchsten Pegel" }] as o}
+  <h3>{t("settings.meterHeader")}</h3>
+  <div class="choice" role="radiogroup" aria-label={t("settings.sourceMeterHeader")}>
+    {#each [{ v: "outputs", t: t("settings.sumOutputs"), d: t("settings.powerSumOutputsPer") },
+      { v: "inputs", t: t("settings.loudestInputPair"), d: t("settings.inputPairHighestLevel") }] as o}
       <label class="opt" class:on={meter.source === o.v}>
         <input type="radio" name="src" value={o.v} checked={meter.source === o.v}
           onchange={() => setMeter(o.v as MeterSource, meter.sides)} />
@@ -37,25 +47,25 @@
     {/each}
   </div>
   {#if noOutputLevels}
-    <p class="warn small">Die Firmware dieses Geräts liefert keine Ausgangspegel; die Kopfzeile zeigt die Eingänge.</p>
+    <p class="warn small">{t("settings.firmwareDeviceReportsNo")}</p>
   {/if}
 
   {#if meter.source === "outputs"}
     <table>
-      <thead><tr><th>Ausgang</th>{#each SIDES as s}<th class="c">{s.t}</th>{/each}</tr></thead>
+      <thead><tr><th>{t("settings.output")}</th>{#each SIDES as s}<th class="c">{tx(s.t)}</th>{/each}</tr></thead>
       <tbody>
         {#each { length: outs } as _, i}
           <tr>
             <td><span class="n num">{i + 1}</span> {outName(i + 1)}</td>
             {#each SIDES as s}
               <td class="c"><input type="radio" name="side{i}" checked={meter.sides[i] === s.v}
-                aria-label="Ausgang {i + 1} {s.t}" onchange={() => setSide(i, s.v)} /></td>
+                aria-label={t("settings.outputNSide", { n: i + 1, side: tx(s.t) })} onchange={() => setSide(i, s.v)} /></td>
             {/each}
           </tr>
         {/each}
       </tbody>
     </table>
-    <div><button onclick={resetMeter}>Standard (links 1/3/5/7, rechts 2/4/6/8)</button></div>
+    <div><button onclick={resetMeter}>{t("settings.defaultLeft13")}</button></div>
   {/if}
 </section>
 

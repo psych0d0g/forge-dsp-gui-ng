@@ -1,14 +1,15 @@
 // A firmware update from start to end. The text protocol and the raw bytes share one port; the
 // caller hands in both, so the sequence can be tested against the simulated target.
 import type { ByteLink } from "../transport/types";
+import { t, tk } from "../i18n/index.svelte";
 import { APP_SIZE, Bootloader, EEPROM_SIZE, NoAnswer, paddedImage } from "./client";
 
 export type Step = "power" | "read" | "sdbackup" | "enter" | "connect" | "backup" | "write" | "verify" | "start" | "identity";
 export const STEP_LABEL: Record<Step, string> = {
-  power: "Bootloader mit dem Taster starten", read: "Firmware und Einstellungen aus dem Gerät lesen (Sicherung)",
-  sdbackup: "Sicherung auf die Speicherkarte im Forge",
-  enter: "Bootloader anfordern", connect: "Bootloader verbinden", backup: "Alte Firmware und Einstellungen sichern",
-  write: "Neue Firmware schreiben", verify: "Geschriebenes prüfen", start: "Neue Firmware starten", identity: "Gerätekennung prüfen",
+  power: tk("firmware.startBootloaderButton"), read: tk("firmware.readFirmwareSettingsFrom"),
+  sdbackup: tk("firmware.backupMemoryCardForge"),
+  enter: tk("firmware.requestBootloader"), connect: tk("firmware.connectBootloader"), backup: tk("firmware.backUpOldFirmware"),
+  write: tk("firmware.writeNewFirmware"), verify: tk("firmware.verifyWhatWasWritten"), start: tk("firmware.startNewFirmware"), identity: tk("firmware.checkDeviceIdentity"),
 };
 
 export interface UpdateIo {
@@ -53,7 +54,7 @@ export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootl
       await sleep(2000);                           // bursts during the reset would spoil the baud rate measurement
       at("connect");
       if (!(await bl.connect(o.connectMs ?? 40000)))
-        throw new Error("Der Bootloader meldet sich nicht. Das Gerät läuft mit der bisherigen Firmware weiter.");
+        throw new Error(t("firmware.bootloaderDoesNotAnswer"));
     }
     const v = await bl.bootloaderVersion();
 
@@ -73,7 +74,7 @@ export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootl
     at("verify", 0, n);
     const back = await bl.readFlash(0, n, (d) => at("verify", d, n));
     if (back.length !== n || back.some((b, i) => b !== want[i]))
-      throw new Error("Das Zurückgelesene stimmt nicht mit dem Image überein. Die Firmware wird nicht gestartet.");
+      throw new Error(t("firmware.whatWasReadBack"));
 
     at("start");
     await bl.startApplication();
@@ -83,7 +84,7 @@ export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootl
       up = (await io.ask("system.ping")).includes("pong");
       if (!up) await sleep(500);
     }
-    if (!up) throw new Error("Die neue Firmware antwortet nicht.");
+    if (!up) throw new Error(t("firmware.newFirmwareDoesNot"));
 
     at("identity");
     if (o.identity) {
@@ -96,13 +97,13 @@ export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootl
         await io.sendLine(`set.1 system.key.info="${o.identity}"`);
         await sleep(500);
         if (!(await io.ask("system.key.info")).includes(`-${o.identity}-`))
-          throw new Error(`Die Kennung ${o.identity} ließ sich nicht setzen (diese Firmware kennt den Befehl nicht).`);
+          throw new Error(t("firmware.identityIdCouldNot", { id: o.identity }));
       }
     }
     return { bootloader: `${v[0]}.${v[1]}`, written: n };
   } catch (e) {
     if (e instanceof UpdateError) throw e;
-    const msg = e instanceof NoAnswer ? "Der Bootloader antwortet nicht mehr." : e instanceof Error ? e.message : String(e);
+    const msg = e instanceof NoAnswer ? t("firmware.bootloaderNoLongerAnswers") : e instanceof Error ? e.message : String(e);
     throw new UpdateError(msg, step, touched);
   }
 }

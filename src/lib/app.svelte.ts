@@ -9,7 +9,8 @@ import { autoPort, openNativeSerial, portsNative, type PortInfo } from "./transp
 import { isNative } from "./native";
 import { openSim, simFlavours } from "./transport/sim";
 import { openWebSocket } from "./transport/websocket";
-import { applyAnswer, emptyState, inputDefaultName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
+import { t } from "./i18n/index.svelte";
+import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
@@ -76,7 +77,7 @@ async function openUsb() {
     p = await new Promise<PortInfo | null>((resolve) => { portChoice.ports = ports; portChoice.resolve = resolve; });
     portChoice.ports = null; portChoice.resolve = null;
   }
-  if (!p) throw new Error("Kein Anschluss gewählt.");
+  if (!p) throw new Error(t("common.noPortChosen"));
   return openNativeSerial(p.name);
 }
 /** USB is possible: Web Serial in the browser, always in the desktop app */
@@ -323,7 +324,7 @@ export async function query(reg: string): Promise<Answer[]> {
 
 /** one write that is not a model value (diagnostics); returns the error text or "" */
 export async function writeOnce(reg: string, value: Value): Promise<string> {
-  if (!client) return "nicht verbunden";
+  if (!client) return t("common.notConnected");
   try {
     const r = await client.set(reg, value, { checksum: true });
     const bad = r.find((a) => a.kind === "error");
@@ -353,23 +354,23 @@ export async function setPoolLengths(core: number, lengths: number[], step: (tex
     });
     return "";
   }
-  if (!client) return "nicht verbunden";
+  if (!client) return t("common.notConnected");
   app.exclusive = true;
   try {
-    step("Gerät verteilt die Biquads um …");
+    step(t("app.deviceReallocatesBiquads"));
     const err = await writeOnce(`system.biquads.${core}`, lengths);
     if (err) return err;
-    step("Gerät startet neu und lädt das neue DSP-Programm …");
+    step(t("app.deviceRestartsLoadsNew"));
     await sleep(4000);
     const t0 = Date.now();
     for (let quiet = 0; quiet < 15000;) {
-      if (Date.now() - t0 > 150000) return "Das Gerät meldet sich nicht zurück.";
+      if (Date.now() - t0 > 150000) return t("app.deviceDoesNotCome");
       let ok = false;
       try {
         ok = (await client.get("system.firmware")).some((a) => a.kind === "get");
       } catch { /* still restarting */ }
       if (ok) quiet += 2500;
-      else if (quiet) { quiet = 0; step("Gerät startet ein zweites Mal …"); }
+      else if (quiet) { quiet = 0; step(t("app.deviceStartsSecondTime")); }
       await sleep(2500);
     }
     step("Lese den neuen Stand …");
@@ -423,13 +424,13 @@ let sdBusy = false;
  */
 export async function withSd<T>(fn: (l: SdLink) => Promise<T>): Promise<T> {
   const c = client;
-  if (!c) throw new Error("nicht verbunden");
+  if (!c) throw new Error(t("common.notConnected"));
   const link: SdLink = {
     get: (reg) => c.get(reg),
     async set(reg, value, timeoutMs) {
       const r = await c.set(reg, value, { checksum: true, timeoutMs });
       const bad = r.find((a) => a.kind === "error");
-      return bad ? deviceError(bad) : r.some((a) => a.kind === "info") ? "" : "keine Antwort";
+      return bad ? deviceError(bad) : r.some((a) => a.kind === "info") ? "" : t("common.noAnswer");
     },
   };
   app.exclusive = true;
@@ -454,7 +455,7 @@ export async function sendRaw(line: string) {
 
 /** one set with the value text of a tuning file; returns the error text or "" */
 export async function writeRaw(reg: string, valueText: string): Promise<string> {
-  if (!client) return "nicht verbunden";
+  if (!client) return t("common.notConnected");
   try {
     const r = await client.setRaw(reg, valueText, { checksum: true });
     const bad = r.find((a) => a.kind === "error");
@@ -567,12 +568,14 @@ export function cleanName(t: string): string {
   return v.trim();
 }
 
-export const outName = (ch: number) => app.device.channelNames[ch] || `Ausgang ${ch}`;
+export const outName = (ch: number) => app.device.channelNames[ch] || t("common.outputN", { n: ch });
 export const inDefault = (n: number) => inputDefaultName(n, app.device.gain.in.length || 6);
 export const inNameRaw = (n: number) => (deviceHasInNames() ? app.device.inputNames![n] ?? "" : inNames[n] ?? "");
 export const inName = (n: number) => inNameRaw(n) || inDefault(n);
 /** short caption where the group already says "Analog"/"Digital": "2 L", "R"; a given name as it is */
-export const inShort = (n: number) => inNameRaw(n) || inDefault(n).replace(/^Eingang |^Digital /, "");
+export const inShort = (n: number) => inNameRaw(n) || inPos(n);
+/** "2 L" / "R": the number of an input without a name */
+export const inPos = (n: number) => inputShortName(n, app.device.gain.in.length || 6);
 export const outNameRaw = (ch: number) => app.device.channelNames[ch] ?? "";
 
 export function setOutName(ch: number, name: string) {

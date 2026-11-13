@@ -13,6 +13,7 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}/`,
     trace: "retain-on-failure",
+    locale: "de-DE",                // the tests click German labels; tests/e2e/english.spec.ts sets English
     launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
   },
   projects: [

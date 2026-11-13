@@ -1,27 +1,28 @@
 // Diagnostics on the I2C buses of the Forge (port firmware: i2c.B.scan, i2c.B.A.R, …).
 // Addresses are the 8-bit write addresses as the firmware prints them (&H68).
 import type { Value } from "../protocol/request";
+import { t, tk, tx } from "../i18n/index.svelte";
 
 export interface Chip { bus: number; addr: number; name: string; role: string }
 
 /** chips of the Forge boards by bus and address (forge-dsp-firmware sources) */
 export const CHIPS: Chip[] = [
-  { bus: 1, addr: 0x20, name: "CT7302", role: "S/PDIF-Empfänger und Abtastratenwandler" },
-  { bus: 1, addr: 0x22, name: "CT7302", role: "zweiter Abtastratenwandler" },
-  { bus: 1, addr: 0x40, name: "PCA9554", role: "Port-Expander (Schaltausgänge)" },
-  { bus: 1, addr: 0x4e, name: "PCA9554", role: "Port-Expander (Peripherie)" },
-  { bus: 1, addr: 0x70, name: "PCA9554A", role: "Port-Expander (Schaltausgänge)" },
-  { bus: 1, addr: 0x7e, name: "PCA9554A", role: "Port-Expander (Peripherie)" },
-  { bus: 1, addr: 0x68, name: "TAS3108", role: "DSP 1: Eingänge, Mixer, Signalsummen" },
-  { bus: 1, addr: 0xa0, name: "24LC512", role: "Programmspeicher DSP 1" },
-  { bus: 1, addr: 0xa8, name: "24LC512", role: "Presets" },
-  { bus: 1, addr: 0xe0, name: "Si5338", role: "Taktgenerator" },
-  { bus: 1, addr: 0xe2, name: "Si5338", role: "Taktgenerator" },
-  { bus: 2, addr: 0x68, name: "TAS3108", role: "DSP 2: Ausgänge 5–8" },
-  { bus: 2, addr: 0x6a, name: "TAS3108", role: "DSP 3: Ausgänge 1–4" },
-  { bus: 2, addr: 0x90, name: "ES9018", role: "D/A-Wandler" },
-  { bus: 2, addr: 0xa0, name: "24LC512", role: "Programmspeicher DSP 2" },
-  { bus: 2, addr: 0xa2, name: "24LC512", role: "Programmspeicher DSP 3" },
+  { bus: 1, addr: 0x20, name: "CT7302", role: tk("diagnose.sPDIFReceiverSample") },
+  { bus: 1, addr: 0x22, name: "CT7302", role: tk("diagnose.secondSampleRateConverter") },
+  { bus: 1, addr: 0x40, name: "PCA9554", role: tk("diagnose.portExpanderSwitchedOutputs") },
+  { bus: 1, addr: 0x4e, name: "PCA9554", role: tk("diagnose.portExpanderPeripherals") },
+  { bus: 1, addr: 0x70, name: "PCA9554A", role: tk("diagnose.portExpanderSwitchedOutputs") },
+  { bus: 1, addr: 0x7e, name: "PCA9554A", role: tk("diagnose.portExpanderPeripherals") },
+  { bus: 1, addr: 0x68, name: "TAS3108", role: tk("diagnose.dsp1InputsMixer") },
+  { bus: 1, addr: 0xa0, name: "24LC512", role: tk("diagnose.programMemoryDSP1") },
+  { bus: 1, addr: 0xa8, name: "24LC512", role: tk("common.presets") },
+  { bus: 1, addr: 0xe0, name: "Si5338", role: tk("common.clockGenerator") },
+  { bus: 1, addr: 0xe2, name: "Si5338", role: tk("common.clockGenerator") },
+  { bus: 2, addr: 0x68, name: "TAS3108", role: tk("diagnose.dsp2Outputs5") },
+  { bus: 2, addr: 0x6a, name: "TAS3108", role: tk("diagnose.dsp3Outputs1") },
+  { bus: 2, addr: 0x90, name: "ES9018", role: tk("diagnose.daConverter") },
+  { bus: 2, addr: 0xa0, name: "24LC512", role: tk("diagnose.programMemoryDSP2") },
+  { bus: 2, addr: 0xa2, name: "24LC512", role: tk("diagnose.programMemoryDSP3") },
 ];
 export const chipAt = (bus: number, addr: number) => CHIPS.find((c) => c.bus === bus && c.addr === addr);
 /** the firmware refuses direct access to the EEPROMs */
@@ -48,16 +49,16 @@ export const es9018Locked = (reg27: number) => (reg27 & 1) === 1;
 /** error counters of system.errors = [[code, count], …] */
 export function errorName(code: number): string {
   const FW: Record<number, string> = {
-    33: "EEPROM (Presets)", 34: "DSP meldet Fehlerzustand", 64: "AES-Daten", 65: "Prüfsumme Daten (hart)",
-    66: "Preset laden", 128: "Prüfsumme Daten (weich)", 129: "Schnittstelle: Befehl nicht bestätigt",
-    130: "MCU über 85 °C", 131: "MCU über 90 °C", 132: "MCU über 95 °C", 133: "MCU über 100 °C",
+    33: tk("diagnose.eepromPresets"), 34: tk("diagnose.dspReportsErrorState"), 64: tk("diagnose.aesData"), 65: tk("diagnose.dataChecksumHard"),
+    66: tk("diagnose.loadingPreset"), 128: tk("diagnose.dataChecksumSoft"), 129: tk("diagnose.interfaceCommandNotAcknowledged"),
+    130: tk("diagnose.mcuAbove85C"), 131: tk("diagnose.mcuAbove90C"), 132: tk("diagnose.mcuAbove95C"), 133: tk("diagnose.mcuAbove100C"),
   };
-  if (FW[code]) return FW[code];
+  if (FW[code]) return tx(FW[code]);
   if (code >= 1 && code <= 16) {
     const bit = code - 1;  // bit in the DSP ready mask: core (even) and its program EEPROM (odd) alternate
-    return bit % 2 ? `DSP ${(bit + 1) / 2}: Programmspeicher antwortet nicht` : `DSP ${bit / 2 + 1}: Kern antwortet nicht`;
+    return bit % 2 ? t("diagnose.dspNProgramMemory", { n: (bit + 1) / 2 }) : t("diagnose.dspNCoreDoes", { n: bit / 2 + 1 });
   }
-  if (code >= 17 && code <= 32) return `Baustein ${code - 17} antwortet nicht`;
+  if (code >= 17 && code <= 32) return t("diagnose.chipNDoesNot", { n: code - 17 });
   return `Code ${code}`;
 }
 

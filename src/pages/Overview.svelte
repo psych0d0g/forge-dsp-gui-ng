@@ -3,6 +3,7 @@
   import { INPUT_PAIRS, rawToDb } from "../lib/device";
   import Icon from "../components/Icon.svelte";
   import LevelBar from "../components/LevelBar.svelte";
+  import { t } from "../lib/i18n/index.svelte";
 
   const d = $derived(app.device);
   const id = $derived(d.identity);
@@ -19,25 +20,25 @@
     return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1);
   };
   const stages = $derived([
-    { page: "mixer" as PageId, icon: "inputs", title: "Eingänge",
-      lines: [`${id.analogInPairs} analoge Paare`, `${id.spdifPairs} digital`] },
-    { page: "mixer" as PageId, icon: "mixer", title: "Mixer",
-      lines: [`Profil ${d.mixer.position || "–"}`, d.mixer.input !== null ? `Quelle ${d.mixer.input}` : ""] },
-    { page: "filters" as PageId, icon: "filters", title: "Filter & EQ",
-      lines: [`${activeBq} aktiv`, `von ${allBq.length}`] },
-    { page: "delay" as PageId, icon: "delay", title: "Laufzeit",
-      lines: [delayed ? `${delayed} Kanäle verzögert` : "keine Verzögerung"] },
+    { page: "mixer" as PageId, icon: "inputs", title: t("overview.inputs"), inputs: true,
+      lines: [t("overview.nAnalogPairs", { n: id.analogInPairs }), t("overview.nDigital", { n: id.spdifPairs })] },
+    { page: "mixer" as PageId, icon: "mixer", title: t("common.mixer"), inputs: false,
+      lines: [t("common.profileN", { n: d.mixer.position || "–" }), d.mixer.input !== null ? t("common.sourceN", { n: d.mixer.input }) : ""] },
+    { page: "filters" as PageId, icon: "filters", title: t("common.filtersEQ"), inputs: false,
+      lines: [t("overview.nActive", { n: activeBq }), t("overview.n", { n: allBq.length })] },
+    { page: "delay" as PageId, icon: "delay", title: t("common.delay"), inputs: false,
+      lines: [delayed ? t("overview.nChannelsDelayed", { n: delayed }) : t("overview.noDelay")] },
   ]);
 </script>
 
 <header class="head">
   <div>
-    <h2>{id.model ? `Forge DSP ${id.model}` : "Übersicht"}</h2>
-    <p class="muted">Der Signalweg von links nach rechts. Ein Klick auf eine Stufe öffnet sie.</p>
+    <h2>{id.model ? `Forge DSP ${id.model}` : t("common.overview")}</h2>
+    <p class="muted">{t("overview.signalPathFromLeft")}</p>
   </div>
   {#if d.vu}
-    <button class="ghost floor" onclick={() => go("settings")} title="Ab welchem Pegel die Balken anfangen, und was die Kopfzeile zeigt">
-      Pegelanzeige ab {meter.floor} dBFS</button>
+    <button class="ghost floor" onclick={() => go("settings")} title={t("overview.whereLevelBarsStart")}>
+      {t("overview.levelMeterFromN", { n: meter.floor })}</button>
   {/if}
 </header>
 
@@ -47,7 +48,7 @@
       <span class="ico"><Icon name={s.icon} size={20} /></span>
       <strong>{s.title}</strong>
       {#each s.lines as l}{#if l}<span class="muted">{l}</span>{/if}{/each}
-      {#if s.title === "Eingänge" && d.vu}
+      {#if s.inputs && d.vu}
         <div class="levels">
           {#each INPUT_PAIRS as p}
             {#each p.in as n}
@@ -61,14 +62,14 @@
   {/each}
   <button class="panel stage outs" onclick={() => go("mixer")}>
     <span class="ico"><Icon name="outputs" size={20} /></span>
-    <strong>Ausgänge</strong>
+    <strong>{t("common.outputs")}</strong>
     <div class="chans">
       {#each d.gain.out as raw, i}
         <div class="chan" class:muted={!!d.mute[i]}>
           <span class="n num">{i + 1}</span>
           <span class="nm">{outName(i + 1)}</span>
-          <span class="v num">{d.mute[i] ? "stumm" : `${db(raw)} dB`}</span>
-          {#if d.vuOut}<span class="lvl"><LevelBar value={d.vuOut[i]} label={d.mute[i] ? `${outName(i + 1)} (stumm, Pegel vor dem DAC)` : outName(i + 1)} /></span>{/if}
+          <span class="v num">{d.mute[i] ? t("overview.muted") : `${db(raw)} dB`}</span>
+          {#if d.vuOut}<span class="lvl"><LevelBar value={d.vuOut[i]} label={d.mute[i] ? t("overview.nameMutedLevelBefore", { name: outName(i + 1) }) : outName(i + 1)} /></span>{/if}
         </div>
       {/each}
     </div>
@@ -77,22 +78,22 @@
 
 <div class="tiles">
   <section class="panel tile">
-    <h3>Gerät</h3>
+    <h3>{t("common.device")}</h3>
     <dl>
-      <dt>Modell</dt><dd>{id.model || "–"} <span class="muted">PCB {id.pcb || "–"}</span></dd>
+      <dt>{t("common.model")}</dt><dd>{id.model || "–"} <span class="muted">PCB {id.pcb || "–"}</span></dd>
       <dt>Firmware</dt><dd class="num">{id.port ? `Port ${id.port}` : id.firmware || "–"}
-        {#if id.port}<span class="muted">(Protokoll {id.firmware})</span>{/if}</dd>
-      <dt>Abtastrate</dt><dd class="num">{id.sampleRate ? `${id.sampleRate / 1000} kHz` : "–"}</dd>
-      <dt>Seriennummer</dt><dd class="num">{serial || "–"}</dd>
+        {#if id.port}<span class="muted">({t("common.protocolV", { v: id.firmware })})</span>{/if}</dd>
+      <dt>{t("common.sampleRate")}</dt><dd class="num">{id.sampleRate ? `${id.sampleRate / 1000} kHz` : "–"}</dd>
+      <dt>{t("overview.serialNumber")}</dt><dd class="num">{serial || "–"}</dd>
     </dl>
   </section>
   <section class="panel tile">
-    <h3>Zustand</h3>
+    <h3>{t("common.state")}</h3>
     <dl>
-      <dt>Preset</dt><dd class="num">{d.preset.loaded !== null ? d.preset.loaded + 1 : "–"} <span class="muted">von {id.presets || "–"}</span></dd>
-      <dt>Temperatur</dt><dd class="num">{d.temperature !== null ? `${d.temperature.toFixed(1)} °C` : "–"}</dd>
-      <dt>Clickless</dt><dd>{d.clickless === null ? "nicht verfügbar" : d.clickless ? "ein" : "aus"}</dd>
-      <dt>Fehlerzähler</dt><dd class="num">{d.errors.length ? `${d.errors.length} Einträge` : "keine"}</dd>
+      <dt>Preset</dt><dd class="num">{d.preset.loaded !== null ? d.preset.loaded + 1 : "–"} <span class="muted">{t("overview.n", { n: id.presets || "–" })}</span></dd>
+      <dt>{t("common.temperature")}</dt><dd class="num">{d.temperature !== null ? `${d.temperature.toFixed(1)} °C` : "–"}</dd>
+      <dt>Clickless</dt><dd>{d.clickless === null ? t("overview.notAvailable") : d.clickless ? t("overview.on") : t("common.off")}</dd>
+      <dt>{t("common.errorCounters")}</dt><dd class="num">{d.errors.length ? t("overview.nEntries", { n: d.errors.length }) : t("common.none")}</dd>
     </dl>
   </section>
 </div>

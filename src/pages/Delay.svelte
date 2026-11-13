@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { app, inDefault, inName, inNameRaw, outName, write } from "../lib/app.svelte";
+  import { app, inName, inNameRaw, inPos, outName, write } from "../lib/app.svelte";
+  import { t } from "../lib/i18n/index.svelte";
   import { alignFromDistances, cmToSamples, delayGroups, delayMax, inputDelayGroup, inputsLeftFirst, msToSamples, samplesToCm,
     samplesToMs, type DelayGroup } from "../lib/device";
   import VFader from "../components/VFader.svelte";
@@ -64,16 +65,16 @@
 
 {#snippet strip(side: Side, ch: number, g: DelayGroup, nr: string, name: string, shown: string = name)}
   {@const v = list(side)[ch - 1] ?? 0}
-  <div class="strip" class:zero={!v} class:beyond={v > span} title={v > span ? "Wert liegt über dem Regelbereich" : undefined}>
+  <div class="strip" class:zero={!v} class:beyond={v > span} title={v > span ? t("delay.valueBeyondFaderRange") : undefined}>
     <span class="chn num">{nr}</span>
     <span class="sname" title={name}>{shown || "\u00a0"}</span>
-    <VFader frac={Math.min(1, v / span)} label="Laufzeit {name}" valuetext="{show(v)} {U}"
+    <VFader frac={Math.min(1, v / span)} label={t("delay.delayName", { name })} valuetext="{show(v)} {U}"
       onfrac={(f) => set(side, ch, f * span, g)} onstep={(dir) => set(side, ch, v + dir * (unit === "samples" ? 1 : Math.max(1, Math.round(rate / 10000))), g)} />
     <label class="val num"><input value={show(v)} onchange={(e) => typed(e, side, ch, g)} aria-label="Laufzeit {name} in {U}" /><span>{U}</span></label>
     <span class="alt num">{unit === "samples" ? `${samplesToMs(v, rate).toFixed(2)} ms` : other(v)}</span>
     {#if side === "out"}
-      <label class="dist" title="Abstand vom Hörplatz zum Lautsprecher">
-        <input class="num" inputmode="decimal" placeholder="–" bind:value={dist[ch]} aria-label="Abstand {name} in cm" /><span>cm</span></label>
+      <label class="dist" title={t("delay.distanceFromListeningPosition")}>
+        <input class="num" inputmode="decimal" placeholder="–" bind:value={dist[ch]} aria-label={t("delay.distanceNameCm", { name })} /><span>cm</span></label>
       <span class="want num">{anyDist ? `→ ${show(wanted[ch - 1])}` : ""}</span>
     {/if}
   </div>
@@ -81,7 +82,7 @@
 
 {#snippet meter(side: Side, g: DelayGroup)}
   {@const u = used(side, g)}
-  <div class="meter" title="Die Kanäle dieser Gruppe teilen sich einen Speicher für die Verzögerung">
+  <div class="meter" title={t("delay.channelsGroupShareOne")}>
     <div class="bar"><span style="width:{Math.min(100, (u / g.budget) * 100)}%"></span></div>
     <span class="num">{show(u)} / {show(g.budget)} {U}</span>
   </div>
@@ -89,18 +90,17 @@
 
 <header class="head">
   <div>
-    <h2>Laufzeit</h2>
-    <p class="muted">Verzögerung je Eingang und je Ausgang. An den Ausgängen gleicht sie die Wege der Lautsprecher zum Hörplatz aus, an
-      den Eingängen den Versatz zwischen Quellen.</p>
+    <h2>{t("common.delay")}</h2>
+    <p class="muted">{t("delay.delayPerInputPer")}</p>
   </div>
-  <div class="units" role="group" aria-label="Regelbereich der Fader">
+  <div class="units" role="group" aria-label={t("delay.faderRange")}>
     {#each RANGES as r}
-      <button class:on={span === r} aria-pressed={span === r} title="Regelbereich der Fader" onclick={() => (range = r)}>{rangeLabel(r)}</button>
+      <button class:on={span === r} aria-pressed={span === r} title={t("delay.faderRange")} onclick={() => (range = r)}>{rangeLabel(r)}</button>
     {/each}
   </div>
-  <div class="units" role="group" aria-label="Einheit">
-    {#each [["ms", "ms"], ["cm", "cm"], ["samples", "Samples"]] as [u, t]}
-      <button class:on={unit === u} aria-pressed={unit === u} onclick={() => (unit = u as Unit)}>{t}</button>
+  <div class="units" role="group" aria-label={t("delay.unit")}>
+    {#each [["ms", "ms"], ["cm", "cm"], ["samples", t("delay.samples")]] as [u, label]}
+      <button class:on={unit === u} aria-pressed={unit === u} onclick={() => (unit = u as Unit)}>{label}</button>
     {/each}
   </div>
 </header>
@@ -108,9 +108,9 @@
 {#if inGroup}
   <section class="panel desk">
     <div class="group">
-      <div class="ghead"><h3>Eingänge (Analog)</h3>{@render meter("in", inGroup)}</div>
+      <div class="ghead"><h3>{t("delay.inputsAnalog")}</h3>{@render meter("in", inGroup)}</div>
       <div class="strips">
-        {#each inOrder as n}{@render strip("in", n, inGroup, inDefault(n).replace(/^Eingang /, ""), inName(n), inNameRaw(n))}{/each}
+        {#each inOrder as n}{@render strip("in", n, inGroup, inPos(n), inName(n), inNameRaw(n))}{/each}
       </div>
     </div>
   </section>
@@ -119,7 +119,7 @@
 <section class="panel desk">
   {#each outGroups as g}
     <div class="group">
-      <div class="ghead"><h3>Ausgänge {g.channels[0]}–{g.channels[g.channels.length - 1]}</h3>{@render meter("out", g)}</div>
+      <div class="ghead"><h3>{t("delay.outputsB", { a: g.channels[0], b: g.channels[g.channels.length - 1] })}</h3>{@render meter("out", g)}</div>
       <div class="strips">
         {#each g.channels as ch}{@render strip("out", ch, g, String(ch), outName(ch))}{/each}
       </div>
@@ -128,12 +128,10 @@
 </section>
 
 <div class="foot">
-  <p class="muted small">Fader ziehen oder Wert eintippen. Der Regelbereich der Fader ist oben umschaltbar (wie in der bisherigen Forge-Software), größere Werte lassen sich eintippen.
-    Unter jedem Ausgang: Abstand vom Hörplatz zum Lautsprecher in cm. Der entfernteste bekommt keine Verzögerung, alle anderen so viel, wie ihr
-    Schall zu früh ankäme (343 m/s).</p>
+  <p class="muted small">{t("delay.dragFaderOrType")}</p>
   <div class="apply">
-    {#if anyDist && !fits}<span class="warn">Die Abstände brauchen mehr Verzögerung, als ein Ausgangsblock hergibt.</span>{/if}
-    <button class="primary" disabled={!anyDist || !fits} onclick={applyDistances}>Abstände übernehmen</button>
+    {#if anyDist && !fits}<span class="warn">{t("delay.distancesNeedMoreDelay")}</span>{/if}
+    <button class="primary" disabled={!anyDist || !fits} onclick={applyDistances}>{t("delay.applyDistances")}</button>
   </div>
 </div>
 

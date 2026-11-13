@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../lib/i18n/index.svelte";
   import { untrack } from "svelte";
   import { meter } from "../lib/app.svelte";
   import { vuToDb } from "../lib/device";
@@ -19,7 +20,7 @@
 </script>
 
 <div class="wrap">
-  <div class="lb" title="{label ? label + ': ' : ''}{text} dBFS" role="meter" aria-label="Pegel {label}"
+  <div class="lb" title="{label ? label + ': ' : ''}{text} dBFS" role="meter" aria-label="{t("common.level")} {label}"
     aria-valuemin={floor} aria-valuemax={0} aria-valuenow={Math.max(floor, Math.round(shown))}>
     <div class="fill" style="width:{pct}"></div>
   </div>

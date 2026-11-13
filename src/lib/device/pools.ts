@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.svelte";
 import type { DeviceState, PoolChannel } from "./model";
 
 /**
@@ -43,12 +44,12 @@ export function lostBands(s: DeviceState, k: PoolCore, lengths: number[]): { ch:
 
 /** why lengths cannot be used, "" if they can */
 export function checkLengths(k: PoolCore, lengths: number[]): string {
-  if (lengths.length !== k.channels.length || lengths.some((n) => !Number.isInteger(n))) return "ungültige Werte";
+  if (lengths.length !== k.channels.length || lengths.some((n) => !Number.isInteger(n))) return t("biquads.invalidValues");
   const low = k.channels.find((c, i) => lengths[i] < c.min);
-  if (low) return `mindestens ${low.min} Biquads je Kanal (Kanal ${low.ch})`;
-  if (lengths.some((n) => n > 255)) return "höchstens 255 Biquads je Kanal";
+  if (low) return t("biquads.atLeastNBiquads", { n: low.min, ch: low.ch });
+  if (lengths.some((n) => n > 255)) return t("biquads.atMost255Biquads");
   const f = freeOf(k, lengths);
-  return f < 0 ? `${-f} Biquads mehr als der Pool hat (${k.size})` : "";
+  return f < 0 ? t("biquads.nBiquadsMoreThan", { n: -f, size: k.size }) : "";
 }
 
 /**

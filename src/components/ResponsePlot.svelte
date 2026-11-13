@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../lib/i18n/index.svelte";
   // Frequency response of one channel: sum curve, the selected filter alone, optional phase.
   // Handles sit at frequency/gain of each filter and can be dragged; the wheel changes the Q.
   import type { Biquad } from "../lib/device";
@@ -74,7 +75,7 @@
   }
 </script>
 
-<svg bind:this={svg} viewBox="0 0 {W} {H}" role="img" aria-label="Frequenzgang des Kanals">
+<svg bind:this={svg} viewBox="0 0 {W} {H}" role="img" aria-label={t("ui.frequencyResponseChannel")}>
   {#each GRID_F as f}
     {#if f >= lo && f <= hi}
       <line class="grid" x1={x(f)} x2={x(f)} y1={T} y2={H - B} />
@@ -95,7 +96,7 @@
   {/each}
   {#if area}<path class="single" d={area} />{/if}
   <path class="total" d={line(total.db, y)} />
-  {#if sumCurve}<path class="sum" d={line(sumCurve.db, y)}><title>Summe (elektrisch, mit Pegel, Polarität und Laufzeit)</title></path>{/if}
+  {#if sumCurve}<path class="sum" d={line(sumCurve.db, y)}><title>{t("ui.sumElectricalLevelPolarity")}</title></path>{/if}
   {#each active.filter((f) => f.bq.f >= lo && f.bq.f <= hi) as f}
     <g class="handle" class:sel={f.n === selected} transform="translate({x(f.bq.f)} {y(handleDb(f.bq))})">
       <circle r="11" role="slider" tabindex="0" aria-label="Filter {f.label ?? f.n}: {f.bq.f} Hz" aria-valuenow={f.bq.f}

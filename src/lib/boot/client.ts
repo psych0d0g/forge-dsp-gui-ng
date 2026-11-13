@@ -1,4 +1,5 @@
 // chip45boot3 host side, port of c45b3/client.py. Works on raw bytes of the serial port.
+import { t } from "../i18n/index.svelte";
 import { AUTOBAUD_CHAR, CMD, CrcError, encodeFrame, FrameDecoder, IDENTIFIER, MAX_DATA, OK_BIT } from "./protocol";
 
 import type { ByteLink } from "../transport/types";
@@ -51,7 +52,7 @@ export class Bootloader {
         if (p) return p;
       }
     }
-    throw new NoAnswer("keine Antwort vom Bootloader");
+    throw new NoAnswer(t("firmware.noAnswerFromBootloader"));
   }
 
   /** one frame out, the answer payload back */
@@ -60,11 +61,11 @@ export class Bootloader {
     this.link.flush();
     await this.link.write(encodeFrame(payload));
     const ans = await this.readFrame(timeoutMs);
-    if (ans.length === 2 && ans[0] === 0x65 && ans[1] === 0x30) throw new TargetCrcError("Bootloader meldet Übertragungsfehler");  // "e0"
-    if (!ans.length) throw new BootError("leere Antwort");
+    if (ans.length === 2 && ans[0] === 0x65 && ans[1] === 0x30) throw new TargetCrcError(t("firmware.bootloaderReportsTransmissionError"));  // "e0"
+    if (!ans.length) throw new BootError(t("firmware.emptyAnswer"));
     if (ans[0] === (cmd | OK_BIT)) return ans;
     if (ans[0] === cmd) throw new Refused(`Befehl 0x${cmd.toString(16)} abgelehnt`);
-    throw new BootError(`unerwartete Antwort auf 0x${cmd.toString(16)}`);
+    throw new BootError(t("firmware.unexpectedAnswer0xCmd", { cmd: cmd.toString(16) }));
   }
 
   /** for commands that may be repeated */
@@ -139,7 +140,7 @@ export class Bootloader {
   async writeFlash(image: Uint8Array, progress?: (done: number) => void): Promise<number> {
     const len = Math.ceil(image.length / PAGE_SIZE) * PAGE_SIZE;
     if (!image.length) throw new BootError("leeres Image");
-    if (len > APP_SIZE) throw new BootError("Das Image ist größer als der Anwendungsbereich");
+    if (len > APP_SIZE) throw new BootError(t("firmware.imageLargerThanApplication"));
     const data = new Uint8Array(len).fill(0xff);
     data.set(image);
     await this.setAddress(0);

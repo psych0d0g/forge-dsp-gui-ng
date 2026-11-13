@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tk, tx } from "../lib/i18n/index.svelte";
   import { tick, untrack } from "svelte";
   import { app, outName, setPoolLengths, write } from "../lib/app.svelte";
   import { channelColor } from "../lib/channelColors";
@@ -14,10 +15,10 @@
   const rate = $derived(d.identity.sampleRate || 96000);
   const port = $derived(isPort(d));
   // channels as the firmware numbers them: outputs 1..n, 35/36 = the two signal sums of the mixer
-  const BUS: Record<number, string> = { 35: "Summe A", 36: "Summe B" };
+  const BUS: Record<number, string> = { 35: tk("common.sumA"), 36: tk("common.sumB") };
   // outputs first, the sums (35/36) last and only while "All Over" is on in the mixer
   const channels = $derived(Object.keys(d.biquads).map(Number).filter((c) => c < 30 || sumsActiveAnywhere(d)).sort((a, b) => a - b));
-  const chName = (ch: number) => BUS[ch] ?? outName(ch);
+  const chName = (ch: number) => (BUS[ch] ? tx(BUS[ch]) : outName(ch));
   let ch = $state(0);
   $effect(() => {
     if (!channels.includes(ch)) ch = channels.find((c) => c < 30) ?? channels[0] ?? 0;
@@ -53,7 +54,8 @@
   const EQ_Q = 1, EQ_BW = 18;
   const isBand = (bq: Biquad) => bq.type === EQ_Q || bq.type === EQ_BW;
   const FILTER_TYPES = TYPES.filter((t) => t.type !== 0 && t.type !== EQ_Q && t.type !== EQ_BW);
-  const GROUP_LABEL: Record<string, string> = { EQ: "Shelf, Notch, Bandpass" };
+  const GROUP_LABEL: Record<string, string> = { EQ: tk("filters.shelfNotchBandPass"), Tiefpass: tk("filters.lowPass"), Hochpass: tk("filters.highPass"),
+    Phase: tk("filters.phase"), Sonstige: tk("filters.other") };
   const filterGroups = [...new Set(FILTER_TYPES.map((t) => t.group))];
   // types the device reports (system.limits.types); without that: the port's own types need the port
   const can = (t: { type: number; port?: boolean }) => (lim.types ? lim.types.includes(t.type) : !t.port || port);
@@ -102,9 +104,9 @@
   function copyNow() {
     const plans = copyTo.map((c) => ({ c, ...planCopy(d.biquads[ch], d.biquads[c]) }));
     const lost = plans.filter((p) => p.lost.length);
-    const text = `Filter und EQ von ${chName(ch)} nach ${copyTo.map(chName).join(", ")} kopieren?\n` +
-      "Dort werden alle Plätze überschrieben." +
-      (lost.length ? `\n\nPasst nicht (zu wenig Plätze):\n${lost.map((p) => `${chName(p.c)}: Band ${p.lost.join(", ")}`).join("\n")}` : "");
+    const text = t("filters.copyFiltersEQFrom", { from: chName(ch), to: copyTo.map(chName).join(", ") }) + "\n" +
+      t("filters.allSlotsThereOverwritten") +
+      (lost.length ? "\n\n" + t("filters.doesNotFitToo") + "\n" + lost.map((p) => `${chName(p.c)}: ${t("common.bandN", { n: p.lost.join(", ") })}`).join("\n") : "");
     if (!confirm(text)) return;
     let n = 0;
     for (const p of plans)
@@ -113,7 +115,7 @@
         send(p.c, slot, bq);
         n++;
       }
-    copyNote = n ? `${n} Plätze geschrieben` : "schon gleich, nichts zu schreiben";
+    copyNote = n ? t("filters.nSlotsWritten", { n }) : t("filters.alreadySameNothingWrite");
     copyOpen = false;
     copyTo = [];
   }
@@ -131,13 +133,13 @@
   }
   const clamp = (v: number, [a, b]: [number, number]) => Math.max(a, Math.min(b, v));
   function setType(n: number, type: number) {
-    const bq = d.biquads[ch][n], t = typeInfo(type);
+    const bq = d.biquads[ch][n], ti = typeInfo(type);
     const patch: Partial<Biquad> = { type, flags: bq.flags | 0x80 };
     if (!bq.f) patch.f = 1000;
-    if (t?.q && !bq.q) patch.q = 707;
-    if (t?.b === "Winkel (°)" && !(bq.b >= 1 && bq.b < 360)) patch.b = 90;
-    if (t?.b === "Bandbreite (Hz)" && !bq.b) patch.b = Math.round((patch.f ?? bq.f) / 3) || 100;
-    if (!t?.gain) patch.gain = 0;
+    if (ti?.q && !bq.q) patch.q = 707;
+    if (ti?.b === "Winkel (°)" && !(bq.b >= 1 && bq.b < 360)) patch.b = 90;
+    if (ti?.b === "Bandbreite (Hz)" && !bq.b) patch.b = Math.round((patch.f ?? bq.f) / 3) || 100;
+    if (!ti?.gain) patch.gain = 0;
     update(n, patch);
   }
   // biquad pools (port firmware, forge-dsp-firmware#47): a full channel can get more places
@@ -148,15 +150,15 @@
     const g = proposeGrow(d, ch, GROW);
     const k = poolOf(d, ch)!;
     if (!g?.got) {
-      alert(`Im Vorrat von Kern ${k.core} ist nichts mehr frei, und die anderen Kanäle nutzen ihre Plätze bis zum Ende.\n\n` +
-        "Unter Steuerung › Biquad-Verteilung lassen sich Plätze von Hand verschieben.");
+      alert(t("filters.poolCoreKHas", { k: k.core }) + "\n\n" +
+        t("filters.slotsCanMovedBy"));
       return false;
     }
     const from = k.channels.map((c, i) => ({ c, diff: c.len - g.lengths[i] })).filter((x) => x.diff > 0 && x.c.ch !== ch)
-      .map((x) => `${x.diff} von ${chName(x.c.ch)}`);
-    if (!confirm(`Alle ${slots.length} Plätze von ${chName(ch)} sind belegt. ${g.got} weitere holen` +
-      (from.length ? ` (${from.join(", ")}, dort ungenutzt)` : " (aus dem freien Vorrat)") +
-      "?\n\nDer Forge startet dafür neu, rund 40 s ohne Ton. Kein belegtes Band geht verloren.")) return false;
+      .map((x) => t("filters.nFromName", { n: x.diff, name: chName(x.c.ch) }));
+    if (!confirm(t("filters.allNSlotsName", { n: slots.length, name: chName(ch), more: g.got }) +
+      (from.length ? ` ${t("filters.fromUnusedThere", { from: from.join(", ") })}` : ` ${t("filters.fromFreePool")}`) +
+      "?\n\n" + t("filters.forgeRestartsAbout40"))) return false;
     poolBusy = "…";
     const err = await setPoolLengths(g.core, g.lengths, (t) => (poolBusy = t));
     poolBusy = "";
@@ -219,13 +221,12 @@
 
 <header class="head">
   <div>
-    <h2>Filter & EQ</h2>
-    <p class="muted">Oben die Filter des Kanals (Weichen, Shelf, Phase), unten die EQ-Bänder. Punkte in der Kurve lassen sich ziehen,
-      das Mausrad auf einem Punkt ändert die Güte.</p>
+    <h2>{t("common.filtersEQ")}</h2>
+    <p class="muted">{t("filters.aboveFiltersChannelCrossovers")}</p>
   </div>
 </header>
 
-<div class="chans" role="tablist" aria-label="Kanal">
+<div class="chans" role="tablist" aria-label={t("common.channel")}>
   {#each channels as c}
     {@const n = Object.values(d.biquads[c]).filter(isActive).length}
     <button role="tab" aria-selected={ch === c} class:on={ch === c} class:bus={c > 30} onclick={() => { ch = c; selected = null; }}>
@@ -236,98 +237,98 @@
 
 <!-- filters: crossovers, shelves, notch, all passes -->
 <section class="panel block">
-  <div class="blockhead"><h3>Filter <span class="muted num">{filters.length}</span></h3></div>
+  <div class="blockhead"><h3>{t("filters.filters")} <span class="muted num">{filters.length}</span></h3></div>
   <div class="cards">
     {#each filters as { n, bq } (n)}
-      {@const t = typeInfo(bq.type)}
+      {@const ti = typeInfo(bq.type)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="card" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
         <div class="cardhead">
           <span class="nr">{tag(n)}</span>
-          <select value={bq.type} aria-label="Typ Filter {tag(n)}" title={t?.name ?? ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
-            {#if !t}<option value={bq.type}>Typ {bq.type}</option>{/if}
+          <select value={bq.type} aria-label={t("filters.typeFilterN", { n: tag(n) })} title={ti ? tx(ti.name) : ""} onchange={(e) => setType(n, Number(e.currentTarget.value))}>
+            {#if !ti}<option value={bq.type}>{t("common.typeN", { n: bq.type })}</option>{/if}
             {#each filterGroups as g}
-              <optgroup label={GROUP_LABEL[g] ?? g}>
+              <optgroup label={tx(GROUP_LABEL[g] ?? g)}>
                 {#each FILTER_TYPES.filter((x) => x.group === g) as x}
-                  <option value={x.type} disabled={!can(x)}>{x.name}{can(x) ? "" : " (nicht in dieser Firmware)"}</option>
+                  <option value={x.type} disabled={!can(x)}>{tx(x.name)}{can(x) ? "" : ` ${t("filters.notFirmware")}`}</option>
                 {/each}
               </optgroup>
             {/each}
           </select>
-          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Filter ein/aus"
-            onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
-          <button class="ghost del" title="Filter entfernen" aria-label="Filter {tag(n)} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
+          <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title={t("filters.filterOff")}
+            onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? t("filters.on") : t("common.off2")}</button>
+          <button class="ghost del" title={t("filters.removeFilter")} aria-label={t("filters.removeFilterN", { n: tag(n) })} onclick={() => remove(n)}><Icon name="close" size={14} /></button>
         </div>
         <div class="knobs">
           {#if bq.type !== 19}
-            <Knob size={46} caption="Frequenz" unit="Hz" label="Frequenz Filter {tag(n)}" min={0} max={STEPS} value={toPos(bq.f, lim.freq)}
+            <Knob size={46} caption={t("filters.frequency")} unit="Hz" label={t("filters.frequencyFilterN", { n: tag(n) })} min={0} max={STEPS} value={toPos(bq.f, lim.freq)}
               display={() => fmtHz(bq.f)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : toPos(v, lim.freq); }}
               onchange={(p) => update(n, { f: Math.round(fromPos(p, lim.freq)) })} />
           {/if}
-          {#if t?.gain}
-            <Knob size={46} caption="Pegel" unit="dB" label="Pegel Filter {tag(n)}" min={lim.bqGain[0]} max={lim.bqGain[1]} value={bq.gain}
+          {#if ti?.gain}
+            <Knob size={46} caption={t("common.level")} unit="dB" label={t("filters.levelFilterN", { n: tag(n) })} min={lim.bqGain[0]} max={lim.bqGain[1]} value={bq.gain}
               display={(v) => (v / 10).toFixed(1)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : Math.round(v * 10); }}
               onchange={(v) => update(n, { gain: v })} />
           {/if}
-          {#if t?.q}
-            <Knob size={46} caption="Güte" unit="Q" label="Güte Filter {tag(n)}" min={0} max={STEPS} value={toPos(bq.q, qRange)}
+          {#if ti?.q}
+            <Knob size={46} caption={t("filters.q")} unit="Q" label={t("filters.qFilterN", { n: tag(n) })} min={0} max={STEPS} value={toPos(bq.q, qRange)}
               display={() => String(bq.q / 1000)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : toPos(v * 1000, qRange); }}
               onchange={(p) => update(n, { q: Math.round(fromPos(p, qRange)) })} />
           {/if}
-          {#if t?.b === "Winkel (°)"}
-            <Knob size={46} caption="Winkel" unit="°" label="Winkel Filter {tag(n)}" min={1} max={359} value={clamp(bq.b, [1, 359])}
+          {#if ti?.b === "Winkel (°)"}
+            <Knob size={46} caption={t("filters.angle")} unit="°" label={t("filters.angleFilterN", { n: tag(n) })} min={1} max={359} value={clamp(bq.b, [1, 359])}
               onchange={(v) => update(n, { b: v })} />
-          {:else if t?.b}
-            <Knob size={46} caption="Bandbreite" unit="Hz" label="Bandbreite Filter {tag(n)}" min={0} max={STEPS} value={toPos(bq.b, bwRange)}
+          {:else if ti?.b}
+            <Knob size={46} caption={t("filters.bandwidth")} unit="Hz" label={t("filters.bandwidthFilterN", { n: tag(n) })} min={0} max={STEPS} value={toPos(bq.b, bwRange)}
               display={() => fmtHz(bq.b)} parse={(tx) => { const v = parseNum(tx); return v === null ? null : toPos(v, bwRange); }}
               onchange={(p) => update(n, { b: Math.round(fromPos(p, bwRange)) })} />
           {/if}
         </div>
       </div>
     {/each}
-    <button class="add" onclick={() => add("filter")} disabled={(!free && !canGrow) || !!poolBusy} title={free ? "Filter hinzufügen" : "Filter hinzufügen (holt weitere Plätze, Neustart)"}><span class="plus">+</span><span>Filter</span></button>
+    <button class="add" onclick={() => add("filter")} disabled={(!free && !canGrow) || !!poolBusy} title={free ? t("filters.addFilter") : t("filters.addFilterGetsMore")}><span class="plus">+</span><span>{t("filters.filters")}</span></button>
   </div>
 </section>
 
 <section class="panel plot">
   <div class="plothead">
     <h3>{chName(ch)}</h3>
-    <label class="check" title="Nur den Frequenzbereich zeigen, in dem die Filter dieses Kanals liegen"><input type="checkbox" bind:checked={zoom} /> Ausschnitt</label>
-    <label class="check"><input type="checkbox" bind:checked={showPhase} /> Phase</label>
+    <label class="check" title={t("filters.showOnlyFrequencyRange")}><input type="checkbox" bind:checked={zoom} /> {t("filters.zoom")}</label>
+    <label class="check"><input type="checkbox" bind:checked={showPhase} /> {t("filters.phase")}</label>
     {#if d.biquads[partner(ch)]}
-      <label class="check" title="Jede Änderung auch auf {chName(partner(ch))} anwenden">
-        <input type="checkbox" bind:checked={linked} /> mit {chName(partner(ch))} koppeln</label>
+      <label class="check" title={t("filters.applyEveryChangeName", { name: chName(partner(ch)) })}>
+        <input type="checkbox" bind:checked={linked} /> {t("filters.linkName", { name: chName(partner(ch)) })}</label>
     {/if}
     {#if channels.length > 1}
       <button class="ghost copybtn" aria-expanded={copyOpen} onclick={() => { copyOpen = !copyOpen; copyNote = ""; }}
-        title="Alle Filter und EQ-Bänder dieses Kanals auf andere Kanäle übertragen">Kopieren …</button>
+        title={t("filters.copyAllFiltersEQ")}>{t("filters.copy")}</button>
     {/if}
   </div>
   {#if copyOpen}
-    <div class="copy" role="group" aria-label="Ziel der Kopie">
-      <span class="muted">{chName(ch)} kopieren nach:</span>
+    <div class="copy" role="group" aria-label={t("filters.copyTarget")}>
+      <span class="muted">{t("filters.copyName", { name: chName(ch) })}</span>
       {#each channels.filter((c) => c !== ch) as c}
         <label class="chip" class:on={copyTo.includes(c)} style="--c:{colorOf(c)}">
           <input type="checkbox" checked={copyTo.includes(c)}
             onchange={(e) => (copyTo = (e.target as HTMLInputElement).checked ? [...copyTo, c] : copyTo.filter((x) => x !== c))} />
           {c < 30 ? `${c} ` : ""}{chName(c)}</label>
       {/each}
-      <button class="primary" disabled={!copyTo.length} onclick={copyNow}>Kopieren</button>
-      <button class="ghost" onclick={() => { copyOpen = false; copyTo = []; }}>Abbrechen</button>
+      <button class="primary" disabled={!copyTo.length} onclick={copyNow}>{t("filters.copy2")}</button>
+      <button class="ghost" onclick={() => { copyOpen = false; copyTo = []; }}>{t("common.cancel")}</button>
     </div>
   {/if}
   {#if copyNote}<p class="muted small copynote">{copyNote}</p>{/if}
   {#if channels.length > 1}
-    <div class="overlay" role="group" aria-label="Weitere Kanäle über die Kurve legen">
-      <span class="muted">Dazu legen:</span>
+    <div class="overlay" role="group" aria-label={t("filters.layMoreChannelsOver")}>
+      <span class="muted">{t("filters.overlay")}</span>
       {#each channels.filter((c) => c !== ch) as c}
         <button class="chip" class:on={over.includes(c)} aria-pressed={over.includes(c)} style="--c:{colorOf(c)}" onclick={() => toggleOver(c)}>
           <span class="swatch"></span>{c < 30 ? `${c} ` : ""}{chName(c)}</button>
       {/each}
-      {#if over.length}<button class="ghost clear" onclick={() => { over = []; view = section(); }}>keine</button>{/if}
+      {#if over.length}<button class="ghost clear" onclick={() => { over = []; view = section(); }}>{t("common.none")}</button>{/if}
       {#if ch < 30 && over.some((c) => c < 30 && c !== ch)}
-        <label class="check sumtoggle" title="Elektrische Summe dieses Kanals und der dazugelegten Ausgänge, mit Ausgangspegel, Polarität und Laufzeit (ohne Raum und Lautsprecher). Stumme Ausgänge zählen nicht.">
-          <input type="checkbox" bind:checked={showSum} /> Summe</label>
+        <label class="check sumtoggle" title={t("filters.electricalSumChannelOverlaid")}>
+          <input type="checkbox" bind:checked={showSum} /> {t("filters.sum")}</label>
       {/if}
     </div>
   {/if}
@@ -339,9 +340,9 @@
 
 <!-- EQ bands -->
 <section class="panel block">
-  <div class="blockhead"><h3>EQ-Bänder <span class="muted num">{bands.length}</span></h3>
-    <span class="muted small">{free} von {slots.length} Plätzen dieses Kanals frei{#if canGrow}
-      · <button class="link" onclick={() => (app.page = "biquads")}>Plätze verteilen</button>{/if}</span></div>
+  <div class="blockhead"><h3>{t("filters.eqBands")} <span class="muted num">{bands.length}</span></h3>
+    <span class="muted small">{t("filters.nMSlotsChannel", { n: free, m: slots.length })}{#if canGrow}
+      · <button class="link" onclick={() => (app.page = "biquads")}>{t("filters.allocateSlots")}</button>{/if}</span></div>
   <div class="strips">
     {#each bands as { n, bq } (n)}
       {@const bw = bq.type === EQ_BW}
@@ -349,35 +350,35 @@
       <div class="strip" class:sel={selected === n} class:off={!isActive(bq)} onpointerdown={() => (selected = n)} onfocusin={() => (selected = n)}>
         <div class="striphead">
           <span class="nr">{tag(n)}</span>
-          <button class="ghost del" title="Band entfernen" aria-label="Band {tag(n)} entfernen" onclick={() => remove(n)}><Icon name="close" size={14} /></button>
+          <button class="ghost del" title={t("filters.removeBand")} aria-label={t("filters.removeBandN", { n: tag(n) })} onclick={() => remove(n)}><Icon name="close" size={14} /></button>
         </div>
-        <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title="Band ein/aus"
-          onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? "Ein" : "Aus"}</button>
+        <button class="sw" class:on={isActive(bq)} aria-pressed={isActive(bq)} title={t("filters.bandOff")}
+          onclick={() => update(n, { flags: bq.flags ^ 0x80 })}>{isActive(bq) ? t("filters.on") : t("common.off2")}</button>
         <div class="fader">
-          <VFader frac={gainFrac(bq.gain)} zero={gainFrac(0)} label="Pegel Band {tag(n)}" valuetext={fmtG(bq.gain)}
+          <VFader frac={gainFrac(bq.gain)} zero={gainFrac(0)} label={t("filters.levelBandN", { n: tag(n) })} valuetext={fmtG(bq.gain)}
             onfrac={(f) => update(n, { gain: Math.round(lim.bqGain[0] + f * (lim.bqGain[1] - lim.bqGain[0])) })}
             onstep={(dir) => update(n, { gain: clamp(bq.gain + dir * 5, lim.bqGain) })} />
         </div>
-        <label class="f"><span>Pegel dB</span><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
+        <label class="f"><span>{t("filters.levelDB")}</span><input class="num" data-k="gain" onkeydown={tabAcross} value={bq.gain / 10} inputmode="decimal"
           onchange={(e) => num(e, n, "gain", 10, lim.bqGain)} /></label>
-        <label class="f"><span>Frequenz Hz</span><input class="num" data-k="f" onkeydown={tabAcross} value={bq.f} inputmode="numeric"
+        <label class="f"><span>{t("filters.frequencyHz")}</span><input class="num" data-k="f" onkeydown={tabAcross} value={bq.f} inputmode="numeric"
           onchange={(e) => num(e, n, "f", 1, lim.freq)} /></label>
         <div class="f">
-          <span class="mode" role="group" aria-label="Breite des Bands angeben als">
-            <button class:on={!bw} aria-pressed={!bw} title="Breite als Güte (Q)" onclick={() => bandMode(n, bq, false)}>Q</button>
-            <button class:on={bw} aria-pressed={bw} title="Breite als Bandbreite in Hz" onclick={() => bandMode(n, bq, true)}>Hz</button>
+          <span class="mode" role="group" aria-label={t("filters.giveWidthBandAs")}>
+            <button class:on={!bw} aria-pressed={!bw} title={t("filters.widthAsQ")} onclick={() => bandMode(n, bq, false)}>Q</button>
+            <button class:on={bw} aria-pressed={bw} title={t("filters.widthAsBandwidthHz")} onclick={() => bandMode(n, bq, true)}>Hz</button>
           </span>
           {#if bw}
-            <input class="num" data-k="w" onkeydown={tabAcross} value={bq.b} inputmode="numeric" aria-label="Bandbreite Band {tag(n)} in Hz"
-              title="Bandbreite in Hz" onchange={(e) => num(e, n, "b", 1, [1, lim.bqB[1]])} />
+            <input class="num" data-k="w" onkeydown={tabAcross} value={bq.b} inputmode="numeric" aria-label={t("filters.bandwidthBandNHz", { n: tag(n) })}
+              title={t("filters.bandwidthHz")} onchange={(e) => num(e, n, "b", 1, [1, lim.bqB[1]])} />
           {:else}
-            <input class="num" data-k="w" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal" aria-label="Güte Band {tag(n)}"
-              title="Güte (Q)" onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} />
+            <input class="num" data-k="w" onkeydown={tabAcross} value={bq.q / 1000} inputmode="decimal" aria-label={t("filters.qBandN", { n: tag(n) })}
+              title={t("filters.q2")} onchange={(e) => num(e, n, "q", 1000, lim.bqQ)} />
           {/if}
         </div>
       </div>
     {/each}
-    <button class="add" onclick={() => add("band")} disabled={(!free && !canGrow) || !!poolBusy} title={free ? "EQ-Band hinzufügen" : "EQ-Band hinzufügen (holt weitere Plätze, Neustart)"}><span class="plus">+</span><span>Band</span></button>
+    <button class="add" onclick={() => add("band")} disabled={(!free && !canGrow) || !!poolBusy} title={free ? t("filters.addEQBand") : t("filters.addEQBandGets")}><span class="plus">+</span><span>{t("filters.band")}</span></button>
   </div>
 </section>
 

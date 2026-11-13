@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { app, inDefault, inNameRaw, outName, outNameRaw, setInName, setOutName, write } from "../lib/app.svelte";
+  import { t } from "../lib/i18n/index.svelte";
+  import { app, inDefault, inPos, inNameRaw, outName, outNameRaw, setInName, setOutName, write } from "../lib/app.svelte";
   import { inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames, sumsActive,
     sumsMapping, sumsShares } from "../lib/device";
   import Knob from "../components/Knob.svelte";
@@ -102,35 +103,34 @@
     d[kind][ch - 1] = v;
     write(`${kind}.out.${ch}`, v);
   }
-  const short = (g: number) => inDefault(g).replace(/^Eingang |^Digital /, "");
+  const short = (g: number) => inPos(g);
 </script>
 
 <header class="head">
   <div>
-    <h2>Mixer</h2>
-    <p class="muted">Von oben nach unten wie das Signal läuft: Eingangspegel, Routing auf die Ausgänge, Ausgangspegel. Jede Spalte
-      ist ein Eingang.</p>
+    <h2>{t("common.mixer")}</h2>
+    <p class="muted">{t("mixer.topBottomAsSignal")}</p>
   </div>
 </header>
 
 <div class="bar">
-  <div class="tabs" role="tablist" aria-label="Mixer-Profil">
+  <div class="tabs" role="tablist" aria-label={t("mixer.mixerProfile")}>
     {#each profiles as p}
       <button role="tab" aria-selected={profile === p} class:on={profile === p} onclick={() => (profile = p)}>
-        Profil {p}{#if d.mixer.position === p}<span class="dot ok" title="aktiv"></span>{/if}</button>
+        {t("common.profileN", { n: p })}{#if d.mixer.position === p}<span class="dot ok" title={t("common.active")}></span>{/if}</button>
     {/each}
   </div>
   {#if profile === d.mixer.position}
-    <span class="muted">Aktives Profil: Änderungen sind sofort zu hören.</span>
+    <span class="muted">{t("mixer.activeProfileChangesHeard")}</span>
   {:else}
-    <button class="primary" onclick={activate}>Aktivieren</button>
-    <span class="muted">Nicht aktiv: erst nach dem Aktivieren hörbar.</span>
+    <button class="primary" onclick={activate}>{t("mixer.activate")}</button>
+    <span class="muted">{t("mixer.notActiveHeardOnly")}</span>
   {/if}
   <button class="allover" class:on={allOver} role="switch" aria-checked={allOver} disabled={gliding} onclick={toggleAllOver}
-    title="Gemeinsamer Signalweg mit eigener Filterkette vor allen Ausgängen (Summe A links, Summe B rechts)">
+    title={t("mixer.commonSignalPathIts")}>
     <span class="sw"></span>All Over</button>
   <label class="src">
-    <span class="muted">Digitale Quelle</span>
+    <span class="muted">{t("mixer.digitalSource")}</span>
     <select value={val(1, 10) ?? 0} onchange={(e) => source(Number(e.currentTarget.value))}>
       {#if !sources.some((s) => s.value === (val(1, 10) ?? 0))}<option value={val(1, 10) ?? 0}>–</option>{/if}
       {#each sources as s}<option value={s.value}>{s.label}</option>{/each}
@@ -147,18 +147,18 @@
     <span class="gtitle" class:locked={!allOver} style="grid-column: span 2">All Over</span>
 
     <!-- channel names -->
-    <span class="rlabel muted">Kanal</span>
-    {#each analog as g}<span class="cname"><NameField value={inNameRaw(g)} placeholder={short(g)} label="Name {inDefault(g)}" onchange={(v) => setInName(g, v)} /></span>{/each}
+    <span class="rlabel muted">{t("common.channel")}</span>
+    {#each analog as g}<span class="cname"><NameField value={inNameRaw(g)} placeholder={short(g)} label={t("mixer.nameName", { name: inDefault(g) })} onchange={(v) => setInName(g, v)} /></span>{/each}
     <span></span>
-    {#each digital as g}<span class="cname"><NameField value={inNameRaw(g)} placeholder={short(g)} label="Name {inDefault(g)}" onchange={(v) => setInName(g, v)} /></span>{/each}
+    {#each digital as g}<span class="cname"><NameField value={inNameRaw(g)} placeholder={short(g)} label={t("mixer.nameName", { name: inDefault(g) })} onchange={(v) => setInName(g, v)} /></span>{/each}
     <span></span>
-    {#each SUM as n}<span class="cname fixed" class:locked={!allOver} title="Summe {n}">{n}</span>{/each}
+    {#each SUM as n}<span class="cname fixed" class:locked={!allOver} title={t("mixer.sumN", { n })}>{n}</span>{/each}
 
     <!-- input level faders at the head of each strip -->
-    <span class="rlabel faderrow muted">Eingangs&shy;pegel</span>
-    {#each analog as g}<span class="cell faderrow">{#if inScale(g)}<DbFader value={inValue(g)} scale={inScale(g)!} label="Pegel {inDefault(g)}" onchange={(r) => inGain(g, r)} />{/if}</span>{/each}
+    <span class="rlabel faderrow muted">{t("common.inputLevel")}</span>
+    {#each analog as g}<span class="cell faderrow">{#if inScale(g)}<DbFader value={inValue(g)} scale={inScale(g)!} label={t("mixer.levelName", { name: inDefault(g) })} onchange={(r) => inGain(g, r)} />{/if}</span>{/each}
     <span class="faderrow"></span>
-    {#each digital as g}<span class="cell faderrow">{#if inScale(g)}<DbFader value={inValue(g)} scale={inScale(g)!} label="Pegel {inDefault(g)}" onchange={(r) => inGain(g, r)} />{/if}</span>{/each}
+    {#each digital as g}<span class="cell faderrow">{#if inScale(g)}<DbFader value={inValue(g)} scale={inScale(g)!} label={t("mixer.levelName", { name: inDefault(g) })} onchange={(r) => inGain(g, r)} />{/if}</span>{/each}
     <span class="faderrow"></span><span class="faderrow"></span><span class="faderrow"></span>
 
     <!-- sends: one row per output -->
@@ -166,23 +166,23 @@
       {@const c = mixerRowOfOutput(o)}
       <span class="rlabel" class:pairstart={o % 2 === 1}><span class="arrow">→</span><span class="num n">{o}</span><span class="rn">{outName(o)}</span></span>
       {#each analog as g}<span class="cell" class:pairstart={o % 2 === 1}>{#if has(c, g)}<Knob size={40} value={val(c, g)!} min={lim.mixer[0]} max={lim.mixer[1]}
-        label="{inDefault(g)} auf {outName(o)}" onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
+        label={t("mixer.b", { a: inDefault(g), b: outName(o) })} onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
       <span></span>
       {#each digital as g}<span class="cell" class:pairstart={o % 2 === 1}>{#if has(c, g)}<Knob size={40} value={val(c, g)!} min={lim.mixer[0]} max={lim.mixer[1]}
-        label="{inDefault(g)} auf {outName(o)}" onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
+        label={t("mixer.b", { a: inDefault(g), b: outName(o) })} onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
       <span></span>
       {#each MIXER_BUS_COLUMNS as g, i}<span class="cell" class:pairstart={o % 2 === 1}>{#if has(c, g)}<Knob size={40} value={val(c, g)!} min={lim.mixer[0]} max={lim.mixer[1]}
-        disabled={sumLocked} label="Summe {SUM[i]} auf {outName(o)}" onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
+        disabled={sumLocked} label={t("mixer.b", { a: t("mixer.sumN", { n: SUM[i] }), b: outName(o) })} onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
     {/each}
 
     <!-- sends into the sums -->
     {#each MIXER_BUS_ROWS as c, i}
-      <span class="rlabel sumrow" class:first={i === 0} class:locked={!allOver}><span class="arrow">→</span><span class="rn">Summe {SUM[i]}</span></span>
+      <span class="rlabel sumrow" class:first={i === 0} class:locked={!allOver}><span class="arrow">→</span><span class="rn">{t("mixer.sumN", { n: SUM[i] })}</span></span>
       {#each analog as g}<span class="cell sumrow" class:first={i === 0}>{#if has(c, g)}<Knob size={40} value={val(c, g)!} min={lim.mixer[0]} max={lim.mixer[1]}
-        disabled={sumLocked} label="{inDefault(g)} auf Summe {SUM[i]}" onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
+        disabled={sumLocked} label={t("mixer.b", { a: inDefault(g), b: t("mixer.sumN", { n: SUM[i] }) })} onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
       <span class="sumrow" class:first={i === 0}></span>
       {#each digital as g}<span class="cell sumrow" class:first={i === 0}>{#if has(c, g)}<Knob size={40} value={val(c, g)!} min={lim.mixer[0]} max={lim.mixer[1]}
-        disabled={sumLocked} label="{inDefault(g)} auf Summe {SUM[i]}" onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
+        disabled={sumLocked} label={t("mixer.b", { a: inDefault(g), b: t("mixer.sumN", { n: SUM[i] }) })} onchange={(v) => set(c, g, v)} />{/if}</span>{/each}
       <span class="sumrow" class:first={i === 0}></span><span class="sumrow" class:first={i === 0}></span><span class="sumrow" class:first={i === 0}></span>
     {/each}
 
@@ -191,20 +191,20 @@
 
 {#if d.scales.out}
   <section class="panel console outs">
-    <h3>Ausgänge</h3>
+    <h3>{t("common.outputs")}</h3>
     <div class="bank">
       {#each outs as o}
         {@const pair = Math.floor((o - 1) / 2)}
         <div class="ostrip" class:gap={o % 2 === 1 && o > 1}>
           <span class="chn num">{o}</span>
-          <span class="oname"><NameField value={outNameRaw(o)} placeholder="Ausgang {o}" label="Name Ausgang {o}" onchange={(v) => setOutName(o, v)} /></span>
-          <DbFader value={d.gain.out[o - 1]} scale={d.scales.out} dim={!!d.mute[o - 1]} label="Pegel {outName(o)}" onchange={(r) => outGain(o, r)} />
+          <span class="oname"><NameField value={outNameRaw(o)} placeholder={t("common.outputN", { n: o })} label={t("mixer.nameName", { name: t("common.outputN", { n: o }) })} onchange={(v) => setOutName(o, v)} /></span>
+          <DbFader value={d.gain.out[o - 1]} scale={d.scales.out} dim={!!d.mute[o - 1]} label={t("mixer.levelName", { name: outName(o) })} onchange={(r) => outGain(o, r)} />
           <div class="obtn">
-            <button class="sq mute" class:on={!!d.mute[o - 1]} aria-pressed={!!d.mute[o - 1]} title="Stumm" onclick={() => toggle("mute", o)}>M</button>
-            <button class="sq" class:on={!!d.phase[o - 1]} aria-pressed={!!d.phase[o - 1]} title="Polarität drehen (180°)" onclick={() => toggle("phase", o)}>Ø</button>
+            <button class="sq mute" class:on={!!d.mute[o - 1]} aria-pressed={!!d.mute[o - 1]} title={t("mixer.mute")} onclick={() => toggle("mute", o)}>M</button>
+            <button class="sq" class:on={!!d.phase[o - 1]} aria-pressed={!!d.phase[o - 1]} title={t("mixer.invertPolarity180")} onclick={() => toggle("phase", o)}>Ø</button>
           </div>
           {#if o % 2 === 1}
-            <button class="ghost link" class:on={linked[pair]} aria-pressed={!!linked[pair]} title="Paar {o}/{o + 1} gemeinsam verstellen"
+            <button class="ghost link" class:on={linked[pair]} aria-pressed={!!linked[pair]} title={t("mixer.adjustPairBTogether", { a: o, b: o + 1 })}
               onclick={() => (linked[pair] = !linked[pair])}><Icon name="link" size={14} /></button>
           {/if}
         </div>
@@ -213,9 +213,8 @@
   </section>
 {/if}
 
-<p class="muted small foot">Regler ziehen (hoch/runter) oder Wert eintippen, 100 % = voller Pegel. Doppelklick auf einen Drehregler schaltet
-  zwischen 0 und 100, auf einen Fader setzt 0 dB. {#if !allOver}„All Over“ ist aus: Die Summen sind gesperrt.{:else}„All Over“ ist an:
-  Die Summen liegen mit den Anteilen der Spalten A und B auf den Ausgängen; ihre Filter stehen unter „Filter & EQ“.{/if}</p>
+<p class="muted small foot">{t("mixer.dragControlUpDown")}
+  {#if !allOver}{t("mixer.allOverOffSums")}{:else}{t("mixer.allOverSumsReach")}{/if}</p>
 
 <style>
   .head { margin-bottom: 1rem; }

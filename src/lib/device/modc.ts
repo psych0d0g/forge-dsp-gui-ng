@@ -2,6 +2,7 @@
 // Names and help follow the dialogs of the original GUI; field meanings are given only where the
 // firmware sources document them (forge-dsp-firmware src/modc.c, docs/port-changes.md).
 import type { DeviceState, Modc } from "./model";
+import { t, tk, tx } from "../i18n/index.svelte";
 
 /** One input of a block's dialog; indices are 1-based as in the firmware (event 1..4, set 1..4, flags 1..4). */
 export type Field =
@@ -25,128 +26,128 @@ export interface ModcType {
 
 const ev = (i: number, label: string): Field => ({ kind: "event", i, label });
 const set = (i: number, label: string, x: Partial<{ mul: number; unit: string; hint: string }> = {}): Field => ({ kind: "byte", of: "sets", i, label, ...x });
-const OUTS = ["Ausgang 1", "Ausgang 2", "Ausgang 3", "Ausgang 4", "Ausgang 5", "Ausgang 6", "Ausgang 7", "Ausgang 8"];
-const PAIRS = ["Ausgang 1/2", "Ausgang 3/4", "Ausgang 5/6", "Ausgang 7/8"];
+const OUTS = [tk("modc.output1"), tk("modc.output2"), tk("modc.output3"), tk("modc.output4"), tk("modc.output5"), tk("modc.output6"), tk("modc.output7"), tk("modc.output8")];
+const PAIRS = [tk("modc.output12"), tk("modc.output34"), tk("modc.output56"), tk("modc.output78")];
 /** conversion curves of the value sources (flags 1, bits 3..7) */
-const CURVE_BITS = ["log10", "inv. log10", "alog10", "inv. alog10", "Invertieren"];
-const CURVE: Field = { kind: "bits", of: "flags", i: 1, label: "Kennlinie", bits: ["", "", "", ...CURVE_BITS] };
-const RANGE_OUT: Field[] = [set(3, "Ausgang Max."), set(4, "Ausgang Min.")];
+const CURVE_BITS = [tk("modc.log10"), tk("modc.invLog10"), tk("modc.alog10"), tk("modc.invAlog10"), tk("modc.invert")];
+const CURVE: Field = { kind: "bits", of: "flags", i: 1, label: tk("modc.curve"), bits: ["", "", "", ...CURVE_BITS] };
+const RANGE_OUT: Field[] = [set(3, tk("modc.outputMax")), set(4, tk("modc.outputMin"))];
 
 export const MODC_TYPES: ModcType[] = [
-  { type: 16, name: "Lautstärke", help: "Regelt die Pegel der Ausgänge nach Ereigniswerten: Lautstärke, Balance und eine kleine Korrektur, z. B. für Tiefbass oder Hochtöner.",
+  { type: 16, name: tk("modc.volume"), help: tk("modc.setsOutputLevelsFrom"),
     fields: [
-      { kind: "bits", of: "flags", i: 1, label: "Aktiv für", bits: OUTS },
-      ev(1, "Lautstärke der ungeraden Ausgänge (1, 3, 5, 7)"), ev(2, "Lautstärke der geraden Ausgänge (2, 4, 6, 8)"),
-      ev(3, "Korrektur (Mitte = 16)"), { kind: "bits", of: "sets", i: 3, label: "Korrektur wirkt auf", bits: OUTS },
-      ev(4, "Balance (Mitte = 64)"), { kind: "bits", of: "sets", i: 4, label: "Balance wirkt auf", bits: OUTS },
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.active"), bits: OUTS },
+      ev(1, tk("modc.volumeOddOutputs1")), ev(2, tk("modc.volumeEvenOutputs2")),
+      ev(3, tk("modc.correctionCentre16")), { kind: "bits", of: "sets", i: 3, label: tk("modc.correctionActs"), bits: OUTS },
+      ev(4, tk("modc.balanceCentre64")), { kind: "bits", of: "sets", i: 4, label: tk("modc.balanceActs"), bits: OUTS },
     ] },
-  { type: 17, name: "Potentiometer", help: "Ein Potentiometer am Steueranschluss (Pin 4 grün oder Pin 5 blau) samt Umrechnung und Kennlinie. Gibt seinen Wert als Ereignis aus.",
+  { type: 17, name: tk("modc.potentiometer"), help: tk("modc.potentiometerControlPortPin"),
     fields: [
-      set(1, "Poti Max."), set(2, "Poti Min."), set(3, "Ausgang Max."),
+      set(1, tk("modc.potMax")), set(2, tk("modc.potMin")), set(3, tk("modc.outputMax")),
       // flags 1 holds the input (bit 0) and the curve (bits 3..7)
-      { kind: "bits", of: "flags", i: 1, label: "Anschluss und Kennlinie", bits: ["Poti 2 (Pin 5) statt Poti 1 (Pin 4)", "", "", ...CURVE_BITS] },
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.inputCurve"), bits: [tk("modc.pot2Pin5"), "", "", ...CURVE_BITS] },
     ] },
-  { type: 82, name: "Inkrementalgeber", help: "Ein Drehgeber am Steueranschluss (A an Pin 8 weiß, B an Pin 7 grau, Taster an Pin 9 schwarz). Gibt seinen Wert als Ereignis aus.",
-    fields: [set(1, "Startwert"), set(2, "Faktor"), ...RANGE_OUT, CURVE] },
-  { type: 86, name: "IR-Fernbedienung", help: "Infrarot-Empfänger am RJ45-Anschluss „Master“, aktiviert die IR-Ereignisse. Nach dem ersten Aktivieren muss der Forge einmal neu starten.",
-    fields: [set(1, "Startwert"), set(2, "Faktor"), ...RANGE_OUT, CURVE,
-      { kind: "bits", of: "flags", i: 2, label: "Modus", bits: ["Eigene Codes (Custom)"] }] },
-  { type: 84, name: "Stummschaltung", help: "Schaltet die gewählten Ausgänge stumm, solange das Ereignis aktiv ist.",
-    fields: [ev(1, "Auslöser"), { kind: "bits", of: "flags", i: 1, label: "Stumm schalten", bits: OUTS }] },
-  { type: 108, name: "Loudness", help: "Hebt Bass und Höhen an, je leiser gehört wird. Belegt die letzten zwei Filter der gewählten Ausgangspaare.",
+  { type: 82, name: tk("modc.rotaryEncoder"), help: tk("modc.rotaryEncoderControlPort"),
+    fields: [set(1, tk("modc.startValue")), set(2, tk("modc.factor")), ...RANGE_OUT, CURVE] },
+  { type: 86, name: tk("modc.irRemoteControl"), help: tk("modc.infraredReceiverRJ45Port"),
+    fields: [set(1, tk("modc.startValue")), set(2, tk("modc.factor")), ...RANGE_OUT, CURVE,
+      { kind: "bits", of: "flags", i: 2, label: tk("modc.mode"), bits: [tk("modc.ownCodesCustom")] }] },
+  { type: 84, name: tk("modc.mute"), help: tk("modc.mutesChosenOutputsWhile"),
+    fields: [ev(1, tk("modc.trigger")), { kind: "bits", of: "flags", i: 1, label: tk("modc.mute2"), bits: OUTS }] },
+  { type: 108, name: tk("modc.loudness"), help: tk("modc.raisesBassTrebleQuieter"),
     fields: [
-      { kind: "bits", of: "flags", i: 1, label: "Aktiv für", bits: [...PAIRS, "Summe A/B"] },
-      ev(1, "Lautstärke-Quelle (keine = Digitalpegel)"),
-      { kind: "word", of: "sets", i: 1, label: "Bass: Frequenz", unit: "Hz", hint: "0 = 100 Hz" },
-      { kind: "byte", of: "flags", i: 3, label: "Bass: Anhebung je dB Absenkung", mul: 0.01, unit: "dB", hint: "0 = 0,40" },
-      { kind: "word", of: "sets", i: 3, label: "Höhen: Frequenz", unit: "Hz", hint: "0 = 10 000 Hz" },
-      { kind: "byte", of: "flags", i: 4, label: "Höhen: Anhebung je dB Absenkung", mul: 0.01, unit: "dB", hint: "0 = 0,15" },
-      { kind: "byte", of: "flags", i: 2, label: "Referenz (223 = 0 dB)", hint: "0 = 223" },
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.active"), bits: [...PAIRS, tk("modc.sumAB")] },
+      ev(1, tk("modc.volumeSourceNoneDigital")),
+      { kind: "word", of: "sets", i: 1, label: tk("modc.bassFrequency"), unit: "Hz", hint: tk("modc.n0100Hz") },
+      { kind: "byte", of: "flags", i: 3, label: tk("modc.bassBoostPerDB"), mul: 0.01, unit: "dB", hint: "0 = 0,40" },
+      { kind: "word", of: "sets", i: 3, label: tk("modc.trebleFrequency"), unit: "Hz", hint: tk("modc.n010000Hz") },
+      { kind: "byte", of: "flags", i: 4, label: tk("modc.trebleBoostPerDB"), mul: 0.01, unit: "dB", hint: "0 = 0,15" },
+      { kind: "byte", of: "flags", i: 2, label: tk("modc.reference2230DB"), hint: "0 = 223" },
     ] },
-  { type: 106, name: "Mono", help: "Schaltet Ausgangspaare auf Mono, ohne die Abstimmung zu ändern.",
+  { type: 106, name: tk("modc.mono"), help: tk("modc.switchesOutputPairsMono"),
     fields: [
-      { kind: "bits", of: "flags", i: 1, label: "Aktiv für", bits: PAIRS },
-      { kind: "choice", of: "sets", i: 1, label: "Modus", first: 1, options: ["Stereo", "Mono rechts", "Mono links", "Stereo zu Mono (L+R)"] },
-      ev(1, "Ein/Aus über Ereignis (keines = immer ein)"),
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.active"), bits: PAIRS },
+      { kind: "choice", of: "sets", i: 1, label: tk("modc.mode"), first: 1, options: [tk("modc.stereo"), tk("modc.monoRight"), tk("modc.monoLeft"), tk("modc.stereoMonoLR")] },
+      ev(1, tk("modc.offByEventNone")),
     ] },
-  { type: 109, name: "Analoger Mischer", help: "Anteil der drei analogen Eingänge, zusätzlich zur gespeicherten Mischung.",
-    fields: [set(1, "Eingang 1", { unit: "%" }), set(2, "Eingang 2", { unit: "%" }), set(3, "Eingang 3", { unit: "%" })] },
-  { type: 96, name: "Eingangs-Umschalter", help: "Wählt die digitale Quelle automatisch nach bis zu vier Ereignissen. Ereignis 4 hat die höchste Priorität; ohne aktives Ereignis gilt der Rückfall.",
+  { type: 109, name: tk("modc.analogMixer"), help: tk("modc.shareThreeAnalogInputs"),
+    fields: [set(1, tk("modc.input1"), { unit: "%" }), set(2, tk("modc.input2"), { unit: "%" }), set(3, tk("modc.input3"), { unit: "%" })] },
+  { type: 96, name: tk("modc.inputSwitcher"), help: tk("modc.selectsDigitalSourceAutomatically"),
     fields: [
-      { kind: "bits", of: "flags", i: 1, label: "Aktiv für", bits: ["Profil 1", "", "Profil 2", "", "Profil 3", "", "Profil 4"] },
-      set(1, "Quelle ohne aktives Ereignis (Rückfall)"),
-      ev(2, "Ereignis 2"), set(2, "… schaltet auf Quelle"), ev(3, "Ereignis 3"), set(3, "… schaltet auf Quelle"),
-      ev(4, "Ereignis 4 (höchste Priorität)"), set(4, "… schaltet auf Quelle"),
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.active"), bits: [tk("modc.profile1"), "", tk("modc.profile2"), "", tk("modc.profile3"), "", tk("modc.profile4")] },
+      set(1, tk("modc.sourceWithoutActiveEvent")),
+      ev(2, tk("modc.event2")), set(2, tk("modc.switchesSource")), ev(3, tk("modc.event3")), set(3, tk("modc.switchesSource")),
+      ev(4, tk("modc.event4HighestPriority")), set(4, tk("modc.switchesSource")),
     ] },
-  { type: 97, name: "Mixer-Profil-Umschalter", help: "Schaltet die Mixer-Profile automatisch nach bis zu vier Ereignissen um; Ereignis 4 hat die höchste Priorität.",
-    fields: [ev(1, "Ereignis 1 (Rückfall)"), ev(2, "Ereignis 2"), ev(3, "Ereignis 3"), ev(4, "Ereignis 4 (höchste Priorität)")] },
-  { type: 66, name: "Preset-Umschalter", help: "Wählt das Preset über bis zu drei Ereignisse als Binärzahl (Bit 0, 1, 2).",
-    fields: [ev(1, "Bit 0"), ev(2, "Bit 1"), ev(3, "Bit 2")] },
-  { type: 193, name: "Ein-/Abschaltung", help: "Verzögerungen beim Ein- und Ausschalten. Ablauf: Remote-In an, Stumm, Preset laden, Pause „StartUp“, Remote-Out an, Pause „RemoteOut“, Stumm aus … Remote-In aus, Stumm, Pause „RemoteOut“, Remote-Out aus, Pause „ShutDown“, Forge aus.",
+  { type: 97, name: tk("modc.mixerProfileSwitcher"), help: tk("modc.switchesMixerProfilesAutomatically"),
+    fields: [ev(1, tk("modc.event1Fallback")), ev(2, tk("modc.event2")), ev(3, tk("modc.event3")), ev(4, tk("modc.event4HighestPriority"))] },
+  { type: 66, name: tk("modc.presetSwitcher"), help: tk("modc.selectsPresetFromUp"),
+    fields: [ev(1, tk("modc.bit0")), ev(2, tk("modc.bit1")), ev(3, tk("modc.bit2"))] },
+  { type: 193, name: tk("modc.powerOff"), help: tk("modc.delaysWhenSwitchingOff"),
     fields: [
-      set(1, "StartUp: Pause vor Remote-Out", { mul: 0.25, unit: "s" }),
-      set(3, "RemoteOut: Pause nach dem Ein- und vor dem Ausschalten von Remote-Out", { mul: 0.25, unit: "s" }),
-      set(4, "ShutDown: Pause vor dem Ausschalten des Forge", { mul: 0.25, unit: "s" }),
-      set(2, "Abschalten erst, wenn das Signal so lange weg ist", { mul: 0.05, unit: "s", hint: "ungefähr" }),
-      ev(1, "Auslöser (Abschalt-Ereignis)"),
+      set(1, tk("modc.startupPauseBeforeRemote"), { mul: 0.25, unit: "s" }),
+      set(3, tk("modc.remoteoutPauseAfterSwitching"), { mul: 0.25, unit: "s" }),
+      set(4, tk("modc.shutdownPauseBeforeForge"), { mul: 0.25, unit: "s" }),
+      set(2, tk("modc.switchOffOnlyWhen"), { mul: 0.05, unit: "s", hint: tk("modc.approximately") }),
+      ev(1, tk("modc.triggerShutdownEvent")),
     ] },
-  { type: 68, name: "Haupttakt", help: "Gleicht die Fertigungsabweichung des Quarzes (TCXO) aus und stellt die Taktrate des D/A-Wandlers ein. Änderungen wirken erst nach einem Neustart des Forge.",
+  { type: 68, name: tk("modc.mainClock"), help: tk("modc.correctsManufacturingToleranceCrystal"),
     fields: [
-      { kind: "word", of: "sets", i: 1, label: "TCXO-Korrekturwert", signed: true, div: 10, unit: "Hz", min: -1000, max: 1000 },
-      { kind: "choice", of: "sets", i: 3, label: "Taktrate D/A-Wandler",
-        options: ["49,152 MHz", "50,000 MHz", "60,000 MHz", "70,000 MHz", "73,728 MHz", "80,000 MHz", "90,000 MHz", "98,394 MHz", "100,000 MHz"] },
+      { kind: "word", of: "sets", i: 1, label: tk("modc.tcxoCorrection"), signed: true, div: 10, unit: "Hz", min: -1000, max: 1000 },
+      { kind: "choice", of: "sets", i: 3, label: tk("modc.daConverterClockRate"),
+        options: [tk("modc.n49152MHz"), tk("modc.n50000MHz"), tk("modc.n60000MHz"), tk("modc.n70000MHz"), tk("modc.n73728MHz"), tk("modc.n80000MHz"), tk("modc.n90000MHz"), tk("modc.n98394MHz"), tk("modc.n100000MHz")] },
     ] },
   // firmware: modc_spdif -> ERAM CT7302_REGISTER_OPTIONS, read by ct7302.c at the start (only CT7302 boards)
-  { type: 69, name: "S/PDIF", help: "Optionen des Digitalempfängers CT7302. Wirken beim nächsten Start des Forge; nur Geräte mit CT7302 (Forge 96ELN mit PCB 3.0, ETON CORE D8, Forge 96ELN-3).",
-    fields: [{ kind: "bits", of: "flags", i: 1, label: "Optionen", bits: ["192 kHz an Koax/optisch (im Original ohne Wirkung)", "", "", "", "", "", "", "S/PDIF-Empfang mit 32 Bit"] }] },
+  { type: 69, name: tk("modc.sPDIF"), help: tk("modc.optionsCT7302DigitalReceiver"),
+    fields: [{ kind: "bits", of: "flags", i: 1, label: tk("modc.options"), bits: [tk("modc.n192KHzCoaxOptical"), "", "", "", "", "", "", tk("modc.sPDIFReception32")] }] },
   // firmware: modc_ess9038pro -> set 1 = register 7 of the DAC; es90x8pro.c writes it masked with 0xE6
   // (bits 7..5 filter shape, bits 2..1 IIR bandwidth; ES9038PRO data sheet, register 7)
-  { type: 79, name: "ES9038PRO", help: "Digitalfilter des D/A-Wandlers ES9038PRO (Forge 96ELN-3). Ausgeschaltet gilt die Vorgabe (schnell, minimalphasig). Wirkt beim nächsten Start.",
+  { type: 79, name: tk("modc.es9038pro"), help: tk("modc.digitalFilterES9038PRO"),
     fields: [
-      { kind: "choice", of: "sets", i: 1, shift: 5, width: 3, label: "Filterkurve", options: ["schnell, linearphasig", "langsam, linearphasig",
-        "schnell, minimalphasig", "langsam, minimalphasig", "apodisierend, schnell, linearphasig", "Variante 5", "hybrid, schnell, minimalphasig", "Brickwall"] },
-      { kind: "choice", of: "sets", i: 1, shift: 1, width: 2, label: "IIR-Bandbreite", options: ["1,0757 fs (47,44 kHz bei 44,1 kHz)", "1,1338 fs (50 kHz)", "1,3605 fs (60 kHz)", "1,5873 fs (70 kHz)"] },
+      { kind: "choice", of: "sets", i: 1, shift: 5, width: 3, label: tk("modc.filterShape"), options: [tk("modc.fastLinearPhase"), tk("modc.slowLinearPhase"),
+        tk("modc.fastMinimumPhase"), tk("modc.slowMinimumPhase"), tk("modc.apodizingFastLinearPhase"), tk("modc.variant5"), tk("modc.hybridFastMinimumPhase"), tk("modc.brickWall")] },
+      { kind: "choice", of: "sets", i: 1, shift: 1, width: 2, label: tk("modc.iirBandwidth"), options: [tk("modc.n10757Fs47"), tk("modc.n11338Fs50"), tk("modc.n13605Fs60"), tk("modc.n15873Fs70")] },
     ] },
   // firmware: modc_device_sync sends "event.block.<flags 1 & 3 + 1>=[ev1,ev2,ev3,ev4]" to the slave port
-  { type: 3, name: "Geräte-Sync", help: "Gibt bis zu vier Ereigniswerte an den nächsten Forge der Kette weiter (Anschluss „Slave“), bei jeder Änderung und sonst regelmäßig. Dort stehen sie im gewählten Ereignisblock.",
+  { type: 3, name: tk("modc.deviceSync"), help: tk("modc.passesUpFourEvent"),
     fields: [
-      { kind: "choice", of: "flags", i: 1, shift: 0, width: 2, label: "Ziel am nächsten Forge", options: ["Ereignisblock 1", "Ereignisblock 2", "Ereignisblock 3", "Ereignisblock 4"] },
-      ev(1, "Wert 1"), ev(2, "Wert 2"), ev(3, "Wert 3"), ev(4, "Wert 4"),
+      { kind: "choice", of: "flags", i: 1, shift: 0, width: 2, label: tk("modc.targetNextForge"), options: [tk("modc.eventBlock1"), tk("modc.eventBlock2"), tk("modc.eventBlock3"), tk("modc.eventBlock4")] },
+      ev(1, tk("modc.value1")), ev(2, tk("modc.value2")), ev(3, tk("modc.value3")), ev(4, tk("modc.value4")),
     ] },
-  { type: 48, name: "Logik", help: "Verknüpft bis zu vier Ereignisse: Eingänge wahlweise invertiert, dann je Maske UND- oder XOR-verknüpft; die erste Maske mit Treffer setzt den Ausgang.",
+  { type: 48, name: tk("modc.logic"), help: tk("modc.combinesUpFourEvents"),
     fields: [
-      ev(1, "Eingang 1"), ev(2, "Eingang 2"), ev(3, "Eingang 3"), ev(4, "Eingang 4"),
-      { kind: "bits", of: "flags", i: 1, label: "Verknüpfung", bits: ["Eingang 1 invertieren", "Eingang 2 invertieren", "Eingang 3 invertieren",
-        "Eingang 4 invertieren", "Maske 1: XOR statt UND", "Maske 2: XOR statt UND", "Maske 3: XOR statt UND", "Maske 4: XOR statt UND"] },
-      set(1, "Maske 1 (Bits der Eingänge)"), set(2, "Maske 2"), set(3, "Maske 3"), set(4, "Maske 4"),
+      ev(1, tk("modc.input1")), ev(2, tk("modc.input2")), ev(3, tk("modc.input3")), ev(4, tk("modc.input4")),
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.combination"), bits: [tk("modc.invertInput1"), tk("modc.invertInput2"), tk("modc.invertInput3"),
+        tk("modc.invertInput4"), tk("modc.mask1XORInstead"), tk("modc.mask2XORInstead"), tk("modc.mask3XORInstead"), tk("modc.mask4XORInstead")] },
+      set(1, tk("modc.mask1BitsInputs")), set(2, tk("modc.mask2")), set(3, tk("modc.mask3")), set(4, tk("modc.mask4")),
     ] },
-  { type: 49, name: "Umschalter", help: "Gibt je nach Schalter-Ereignis einen von zwei Werten aus, jeweils ein Ereignis oder eine Konstante.",
-    fields: [ev(3, "Schalter"), ev(1, "Wert bei „falsch“"), set(1, "Konstante bei „falsch“"), ev(2, "Wert bei „wahr“"), set(2, "Konstante bei „wahr“"),
-      { kind: "bits", of: "flags", i: 1, label: "Konstante statt Ereignis", bits: ["bei „falsch“", "bei „wahr“"] }] },
-  { type: 50, name: "Toggle", help: "Macht aus einem Tastendruck einen Ein/Aus-Schalter.", fields: [ev(1, "Taster-Ereignis")] },
-  { type: 51, name: "Begrenzer", help: "Begrenzt einen Wert auf Eingang Min./Max. und rechnet ihn auf den Bereich Ausgang Min./Max. um.",
-    fields: [ev(1, "Eingang"), set(1, "Eingang Max."), set(2, "Eingang Min."), ...RANGE_OUT,
-      { kind: "bits", of: "flags", i: 1, label: "Kennlinie", bits: ["", "", "", "", "", "", "", "Invertieren"] }] },
-  { type: 52, name: "Vergleicher", help: "Vergleicht den Eingang (Ereignis 3) mit Ereignis 1, Ereignis 2 oder der Konstante und gibt Ereignis 1 („falsch“) oder Ereignis 2 („wahr“) aus.",
-    fields: [ev(3, "Eingang"), ev(1, "Ausgabe bei „falsch“ / Vergleichswert 1"), ev(2, "Ausgabe bei „wahr“ / Vergleichswert 2"), set(3, "Konstante"),
-      { kind: "bits", of: "flags", i: 1, label: "Bedingung", bits: ["Eingang ≥ Ereignis 1", "Eingang ≤ Ereignis 1", "Eingang ≥ Ereignis 2",
-        "Eingang ≤ Ereignis 2", "Eingang ≥ Konstante", "Eingang ≤ Konstante"] }] },
+  { type: 49, name: tk("modc.switch"), help: tk("modc.outputsOneTwoValues"),
+    fields: [ev(3, tk("modc.switch2")), ev(1, tk("modc.valueWhenFalse")), set(1, tk("modc.constantWhenFalse")), ev(2, tk("modc.valueWhenTrue")), set(2, tk("modc.constantWhenTrue")),
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.constantInsteadEvent"), bits: [tk("modc.whenFalse"), tk("modc.whenTrue")] }] },
+  { type: 50, name: tk("modc.toggle"), help: tk("modc.turnsButtonPressInto"), fields: [ev(1, tk("modc.buttonEvent"))] },
+  { type: 51, name: tk("modc.limiter"), help: tk("modc.limitsValueInputMin"),
+    fields: [ev(1, tk("modc.input")), set(1, tk("modc.inputMax")), set(2, tk("modc.inputMin")), ...RANGE_OUT,
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.curve"), bits: ["", "", "", "", "", "", "", tk("modc.invert")] }] },
+  { type: 52, name: tk("modc.comparator"), help: tk("modc.comparesInputEvent3"),
+    fields: [ev(3, tk("modc.input")), ev(1, tk("modc.outputWhenFalseComparison")), ev(2, tk("modc.outputWhenTrueComparison")), set(3, tk("modc.constant")),
+      { kind: "bits", of: "flags", i: 1, label: tk("modc.condition"), bits: [tk("modc.inputEvent1"), tk("modc.inputEvent12"), tk("modc.inputEvent2"),
+        tk("modc.inputEvent22"), tk("modc.inputConstant"), tk("modc.inputConstant2")] }] },
   // firmware: modc_calculator. Start: event 1 or set 1 (flags 2 bit 5); steps 2..4: flags k bit 7 = on
   // (step 2 always), bit 6 = set k instead of event k, bits 0..3 = × ÷ + − (several: in this order).
   // 16-bit arithmetic, the output is the low byte; ÷ 0 gives 255.
-  { type: 53, name: "Rechner", help: "Rechnet aus bis zu vier Ereignissen oder Konstanten einen Wert: Start, dann Schritt 2 bis 4 der Reihe nach. Gerechnet wird mit 16 Bit, ausgegeben werden die unteren 8 Bit; geteilt durch 0 ergibt 255.",
+  { type: 53, name: tk("modc.calculator"), help: tk("modc.computesValueFromUp"),
     fields: [
-      ev(1, "Start: Ereignis"), set(1, "Start: Konstante"),
-      { kind: "bits", of: "flags", i: 2, label: "Schritt 2 (immer aktiv)", bits: ["× (mal)", "÷ (durch)", "+ (plus)", "− (minus)", "", "Start mit der Konstante", "Konstante statt Ereignis"] },
-      ev(2, "Schritt 2: Ereignis"), set(2, "Schritt 2: Konstante"),
-      { kind: "bits", of: "flags", i: 3, label: "Schritt 3", bits: ["× (mal)", "÷ (durch)", "+ (plus)", "− (minus)", "", "", "Konstante statt Ereignis", "aktiv"] },
-      ev(3, "Schritt 3: Ereignis"), set(3, "Schritt 3: Konstante"),
-      { kind: "bits", of: "flags", i: 4, label: "Schritt 4", bits: ["× (mal)", "÷ (durch)", "+ (plus)", "− (minus)", "", "", "Konstante statt Ereignis", "aktiv"] },
-      ev(4, "Schritt 4: Ereignis"), set(4, "Schritt 4: Konstante"),
+      ev(1, tk("modc.startEvent")), set(1, tk("modc.startConstant")),
+      { kind: "bits", of: "flags", i: 2, label: tk("modc.step2AlwaysActive"), bits: [tk("modc.times"), tk("modc.dividedBy"), tk("modc.plus"), tk("modc.minus"), "", tk("modc.startConstant2"), tk("modc.constantInsteadEvent")] },
+      ev(2, tk("modc.step2Event")), set(2, tk("modc.step2Constant")),
+      { kind: "bits", of: "flags", i: 3, label: tk("modc.step3"), bits: [tk("modc.times"), tk("modc.dividedBy"), tk("modc.plus"), tk("modc.minus"), "", "", tk("modc.constantInsteadEvent"), tk("common.active")] },
+      ev(3, tk("modc.step3Event")), set(3, tk("modc.step3Constant")),
+      { kind: "bits", of: "flags", i: 4, label: tk("modc.step4"), bits: [tk("modc.times"), tk("modc.dividedBy"), tk("modc.plus"), tk("modc.minus"), "", "", tk("modc.constantInsteadEvent"), tk("common.active")] },
+      ev(4, tk("modc.step4Event")), set(4, tk("modc.step4Constant")),
     ] },
 ];
 export const modcType = (t: number) => MODC_TYPES.find((x) => x.type === t);
-export const modcName = (t: number) => (t === 0 ? "leer" : modcType(t)?.name ?? `Typ ${t}`);
+export const modcName = (ty: number) => (ty === 0 ? t("modc.empty") : modcType(ty) ? tx(modcType(ty)!.name) : t("common.typeN", { n: ty }));
 export const emptyModc = (): Modc => ({ enable: 0, type: 0, flags: [0, 0, 0, 0], events: [0, 0, 0, 0], sets: [0, 0, 0, 0] });
 
 /** value text of modc.N as the firmware expects it */
@@ -162,14 +163,14 @@ export function availableTypes(s: DeviceState): ModcType[] {
 
 /** events a block can listen to: fixed ones of the firmware, and the output of each block (96 + N) */
 const EVENTS: [number, string][] = [
-  [1, "immer aus"], [2, "immer ein"], [3, "Remote-Out"], [4, "Abschaltung"], [5, "Preset"], [6, "USB angeschlossen"],
-  [9, "Übersteuerung A/D"], [10, "Übersteuerung D/A"], [11, "Masse-Schalter 1"], [12, "Masse-Schalter 2"], [13, "Masse-Schalter 3"],
-  [42, "Ausgänge stumm"], [44, "Quellenwahl"], [58, "IR Lautstärke"], [59, "IR Balance"], [60, "IR Bass"], [61, "IR Stumm"],
-  [62, "IR Schalter 1"], [63, "IR Schalter 2"], [64, "IR Schalter 3"],
+  [1, tk("modc.alwaysOff")], [2, tk("modc.always")], [3, tk("modc.remoteOut")], [4, tk("modc.shutdown")], [5, tk("modc.preset")], [6, tk("modc.usbConnected")],
+  [9, tk("modc.overloadAD")], [10, tk("modc.overloadDA")], [11, tk("modc.groundSwitch1")], [12, tk("modc.groundSwitch2")], [13, tk("modc.groundSwitch3")],
+  [42, tk("modc.outputsMuted")], [44, tk("modc.sourceSelection")], [58, tk("modc.irVolume")], [59, tk("modc.irBalance")], [60, tk("modc.irBass")], [61, tk("modc.irMute")],
+  [62, tk("modc.irSwitch1")], [63, tk("modc.irSwitch2")], [64, tk("modc.irSwitch3")],
 ];
 export function eventOptions(blocks: number): { value: number; label: string }[] {
-  return [{ value: 0, label: "–" }, ...EVENTS.map(([value, label]) => ({ value, label: `${value}: ${label}` })),
-    ...Array.from({ length: blocks }, (_, i) => ({ value: 97 + i, label: `${97 + i}: Ausgang Block ${i + 1}` }))];
+  return [{ value: 0, label: "–" }, ...EVENTS.map(([value, label]) => ({ value, label: `${value}: ${tx(label)}` })),
+    ...Array.from({ length: blocks }, (_, i) => ({ value: 97 + i, label: `${97 + i}: ${t("modc.outputBlockN", { n: i + 1 })}` }))];
 }
 
 /** 16-bit value over two bytes (low byte first), as the dialogs of the original GUI store it */

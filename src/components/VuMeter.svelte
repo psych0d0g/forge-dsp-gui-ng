@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { app, inName, meter } from "../lib/app.svelte";
   import { INPUT_PAIRS, vuSum, vuToDb } from "../lib/device";
+  import { t } from "../lib/i18n/index.svelte";
 
   // The header shows the sum of all outputs (system.vu.out, forge-dsp-firmware#52): left = power sum
   // of outputs 1,3,5,7, right = 2,4,6,8. Firmware without output levels: the loudest input pair.
@@ -11,14 +12,14 @@
   let shown = $state<[number, number]>([-200, -200]);
   let label = $state("");
   const outputs = $derived(app.device.vuOut !== null && meter.source === "outputs");
-  const sideList = (side: number) => meter.sides.map((x, i) => (x === side ? i + 1 : 0)).filter(Boolean).join("/") || "keine";
+  const sideList = (side: number) => meter.sides.map((x, i) => (x === side ? i + 1 : 0)).filter(Boolean).join("/") || t("common.none");
 
   $effect(() => {
     const out = app.device.vuOut, vu = app.device.vu;
     let now: [number, number];
     if (out && meter.source === "outputs") {
       now = [vuToDb(vuSum(out, 0, meter.sides)), vuToDb(vuSum(out, 1, meter.sides))];
-      label = "Ausgänge";
+      label = t("common.outputs");
     } else if (vu) {
       let best = INPUT_PAIRS[INPUT_PAIRS.length - 1];
       let bestDb = -Infinity;
@@ -26,10 +27,10 @@
         const d = Math.max(vuToDb(vu[p.in[0] - 1] ?? 0), vuToDb(vu[p.in[1] - 1] ?? 0));
         if (d > bestDb) { bestDb = d; best = p; }
       }
-      // "Eingang 2" / "Digital" for default names, otherwise the user's names
+      // "Eingang 2" / "Digital" (default names, either language), otherwise the user's names
       const [l, r] = best.in.map(inName);
       const common = l.replace(/ L$/, "");
-      label = bestDb <= FLOOR ? "kein Signal" : common !== l && r === `${common} R` ? common : `${l} / ${r}`;
+      label = bestDb <= FLOOR ? t("common.noSignal") : common !== l && r === `${common} R` ? common : `${l} / ${r}`;
       now = best.in.map((i) => vuToDb(vu[i - 1] ?? 0)) as [number, number];
     } else return;
     const prev = untrack(() => shown);  // not a dependency: only a new reading moves the bars
@@ -40,8 +41,9 @@
 </script>
 
 {#if app.device.vu || app.device.vuOut}
-  <div class="vu" title="{outputs ? `Summe der Ausgänge, links ${sideList(0)}, rechts ${sideList(1)}` : 'Eingangspegel'} (Effektivwert, dBFS): {label}. Einstellbar unter Werkzeuge › Einstellungen" role="img"
-    aria-label="Eingangspegel {label} {text} dBFS">
+  <div class="vu" title={t("ui.whatRMSDBFSLabel", { what: outputs
+      ? t("ui.sumOutputsLeftL", { l: sideList(0), r: sideList(1) }) : t("common.inputLevel"), label })} role="img"
+    aria-label="{t("common.level")} {label} {text} dBFS">
     <div class="bars">
       {#each shown as db, i}
         <div class="bar"><span class="ch">{i ? "R" : "L"}</span><div class="rail"><div class="fill" style="width:{pct(db)}"></div></div></div>

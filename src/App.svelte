@@ -18,6 +18,7 @@
   import Biquads from "./pages/Biquads.svelte";
   import SdCard from "./pages/SdCard.svelte";
   import Settings from "./pages/Settings.svelte";
+  import { i18n, setLang, t, tk, tx } from "./lib/i18n/index.svelte";
 
   const version = __APP_VERSION__;
   const commit = __APP_COMMIT__;
@@ -27,14 +28,14 @@
 
   // navigation in the order of the signal path, then control, then tools
   const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
-    { group: "Gerät", items: [{ id: "overview", label: "Übersicht" }] },
-    { group: "Signalweg", items: [
-      { id: "mixer", label: "Mixer" }, { id: "filters", label: "Filter & EQ" }, { id: "delay", label: "Laufzeit" }] },
-    { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" },
-      { id: "biquads", label: "Biquad-Verteilung" }] },
-    { group: "Werkzeuge", items: [
-      { id: "diagnose", label: "Diagnose" }, { id: "sdcard", label: "Speicherkarte" }, { id: "firmware", label: "Firmware" }, { id: "settings", label: "Einstellungen" },
-      { id: "console", label: "Konsole" }] },
+    { group: tk("common.device"), items: [{ id: "overview", label: tk("common.overview") }] },
+    { group: tk("app.signalPath"), items: [
+      { id: "mixer", label: tk("common.mixer") }, { id: "filters", label: tk("common.filtersEQ") }, { id: "delay", label: tk("common.delay") }] },
+    { group: tk("app.control"), items: [{ id: "modc", label: tk("common.controlBlocks") }, { id: "presets", label: tk("common.presets") },
+      { id: "biquads", label: tk("common.biquadAllocation") }] },
+    { group: tk("app.tools"), items: [
+      { id: "diagnose", label: tk("common.diagnostics") }, { id: "sdcard", label: tk("common.memoryCard") }, { id: "firmware", label: tk("common.firmware") }, { id: "settings", label: tk("common.settings") },
+      { id: "console", label: tk("common.console") }] },
   ];
 
   onMount(async () => {
@@ -69,8 +70,8 @@
     navOpen = false;
   }
   const online = $derived(app.status === "online");
-  const title = $derived(app.bootloader ? `Forge im Bootloader${app.device.identity.model ? ` (${app.device.identity.model})` : ""}`
-    : app.bootWait ? "Warte auf den Bootloader" : app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : "Kein Gerät");
+  const title = $derived(app.bootloader ? (app.device.identity.model ? t("app.forgeBootloaderModel", { model: app.device.identity.model }) : t("app.forgeBootloader"))
+    : app.bootWait ? t("app.waitingBootloader") : app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : t("app.noDevice"));
 </script>
 
 <div class="shell" class:nav-open={navOpen}>
@@ -78,53 +79,54 @@
     <div class="brand"><span class="logo">F</span><span>Forge DSP</span></div>
     <nav>
       {#each NAV as g}
-        <h3>{g.group}</h3>
+        <h3>{tx(g.group)}</h3>
         {#each g.items as it}
           <button class="navitem" class:active={app.page === it.id} aria-current={app.page === it.id ? "page" : undefined}
             disabled={(!!app.bootloader || app.bootWait) && it.id !== "firmware"}
-            title={app.bootloader && it.id !== "firmware" ? "Im Bootloader geht nur das Firmware-Update" : undefined}
+            title={app.bootloader && it.id !== "firmware" ? t("app.bootloaderOnlyFirmwareUpdate") : undefined}
             onclick={() => open(it.id)}>
-            <Icon name={it.id} /><span>{it.label}</span>
+            <Icon name={it.id} /><span>{tx(it.label)}</span>
           </button>
         {/each}
       {/each}
     </nav>
   </aside>
-  <button class="scrim" aria-label="Menü schließen" onclick={() => (navOpen = false)}></button>
+  <button class="scrim" aria-label={t("app.closeMenu")} onclick={() => (navOpen = false)}></button>
 
   <header class="glass top">
-    <button class="ghost menu" aria-label="Menü" onclick={() => (navOpen = !navOpen)}><Icon name="menu" size={20} /></button>
+    <button class="ghost menu" aria-label={t("app.menu")} onclick={() => (navOpen = !navOpen)}><Icon name="menu" size={20} /></button>
     <div class="device">
       <span class="dot" class:ok={online} class:busy={app.status === "connecting" || app.status === "reading"}></span>
       <div><strong>{title}</strong>
-        <span class="muted sub">{online ? `${app.transportName}${app.demo ? " (ohne Gerät)" : ""}${app.bootloader ? `, Bootloader ${app.bootloader.version}` : ""}`
-          : app.status === "offline" ? "nicht verbunden" : "verbinde …"}</span></div>
+        <span class="muted sub">{online ? `${app.transportName}${app.demo ? ` ${t("app.noDevice2")}` : ""}${app.bootloader ? `, Bootloader ${app.bootloader.version}` : ""}`
+          : app.status === "offline" ? t("common.notConnected") : t("app.connecting")}</span></div>
     </div>
     {#if online && !app.bootloader}<div class="live"><VuMeter /><MasterFader /></div>{/if}
     <div class="actions">
       {#if online}
-        {#if !app.demo && !app.bootloader}<button class="ghost" title="Alles neu einlesen" onclick={reload}><Icon name="refresh" /></button>{/if}
-        <button onclick={disconnect}>Trennen</button>
+        {#if !app.demo && !app.bootloader}<button class="ghost" title={t("app.readEverythingAgain")} onclick={reload}><Icon name="refresh" /></button>{/if}
+        <button onclick={disconnect}>{t("app.disconnect")}</button>
       {:else if app.status === "offline"}
         <!-- the welcome panel has the connect buttons; here only where it is not shown -->
         {#if app.page === "console"}
-          {#if usbAvailable()}<button class="primary" onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>{/if}
-          {#if onBridge}<button onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
+          {#if usbAvailable()}<button class="primary" onclick={() => connect("usb")}><Icon name="usb" size={16} /> {t("app.connectUSB")}</button>{/if}
+          {#if onBridge}<button onclick={() => connect("esp")}>{t("app.connectESP32")}</button>{/if}
         {/if}
       {/if}
-      <button class="ghost" title="Hell/Dunkel" aria-label="Hell/Dunkel" onclick={toggleTheme}><Icon name="sun" /></button>
+      <button class="ghost lang" title={t("common.language")} aria-label={t("common.language")} onclick={() => setLang(i18n.lang === "de" ? "en" : "de")}>{i18n.lang === "de" ? "EN" : "DE"}</button>
+      <button class="ghost" title={t("app.lightDark")} aria-label={t("app.lightDark")} onclick={toggleTheme}><Icon name="sun" /></button>
     </div>
   </header>
 
   <main>
     {#if app.error}
-      <div class="panel alert" role="alert"><span>{app.error}</span><button class="ghost" onclick={() => (app.error = "")}>Schließen</button></div>
+      <div class="panel alert" role="alert"><span>{app.error}</span><button class="ghost" onclick={() => (app.error = "")}>{t("app.close")}</button></div>
     {/if}
     {#if app.status === "reading" && app.progress}
       <div class="center">
         <section class="panel welcome">
-          <h2>Gerät wird eingelesen</h2>
-          <p class="muted">Mixer und Filter brauchen einige Sekunden (38400 Baud).</p>
+          <h2>{t("app.readingDevice")}</h2>
+          <p class="muted">{t("app.mixerFiltersTakeFew")}</p>
           <progress value={app.progress.done} max={app.progress.total}></progress>
           <p class="muted num">{app.progress.current}</p>
         </section>
@@ -133,29 +135,28 @@
       <div class="center">
         <section class="panel welcome">
           <span class="logo big">F</span>
-          <h2>Forge DSP einrichten</h2>
+          <h2>{t("app.setUpForgeDSP")}</h2>
           {#if usbAvailable()}
-            <p class="muted">Forge per USB anschließen und verbinden. Die Oberfläche liest danach alle Einstellungen aus dem Gerät.</p>
+            <p class="muted">{t("app.connectForgeByUSB")}</p>
             <div class="btns">
-              <button class="primary" disabled={app.status !== "offline"} onclick={() => connect("usb")}><Icon name="usb" size={16} /> USB verbinden</button>
-              <button disabled={app.status !== "offline"} onclick={() => connect("demo")}>Ohne Gerät ansehen</button>
+              <button class="primary" disabled={app.status !== "offline"} onclick={() => connect("usb")}><Icon name="usb" size={16} /> {t("app.connectUSB")}</button>
+              <button disabled={app.status !== "offline"} onclick={() => connect("demo")}>{t("app.tryWithoutDevice")}</button>
               {#if sim.flavours.length}
-                <span class="simpick"><button disabled={app.status !== "offline"} title="Die echte Firmware im Browser, ohne Gerät; Einstellungen bleiben in diesem Browser"
+                <span class="simpick"><button disabled={app.status !== "offline"} title={t("app.realFirmwareBrowserNo")}
                   onclick={() => connect("sim")}>Simulator</button>
-                  {#if sim.flavours.length > 1}<select bind:value={sim.flavour} aria-label="Modell des Simulators">
+                  {#if sim.flavours.length > 1}<select bind:value={sim.flavour} aria-label={t("app.modelSimulator")}>
                     {#each sim.flavours as f}<option value={f}>{f}</option>{/each}</select>{/if}</span>
               {/if}
             </div>
           {:else}
-            <p class="muted">Dieser Browser bietet keine serielle Schnittstelle (Web Serial). Mit einem Browser, der sie
-              unterstützt, geht die Verbindung per USB; über die ESP32-Brücke am RS485-Port geht sie in jedem Browser per WLAN.</p>
+            <p class="muted">{t("app.browserHasNoSerial")}</p>
             <div class="btns">
-              {#if onBridge}<button class="primary" onclick={() => connect("esp")}>ESP32 verbinden</button>{/if}
-              <button onclick={() => connect("demo")}>Ohne Gerät ansehen</button>
+              {#if onBridge}<button class="primary" onclick={() => connect("esp")}>{t("app.connectESP32")}</button>{/if}
+              <button onclick={() => connect("demo")}>{t("app.tryWithoutDevice")}</button>
               {#if sim.flavours.length}
-                <span class="simpick"><button disabled={app.status !== "offline"} title="Die echte Firmware im Browser, ohne Gerät; Einstellungen bleiben in diesem Browser"
+                <span class="simpick"><button disabled={app.status !== "offline"} title={t("app.realFirmwareBrowserNo")}
                   onclick={() => connect("sim")}>Simulator</button>
-                  {#if sim.flavours.length > 1}<select bind:value={sim.flavour} aria-label="Modell des Simulators">
+                  {#if sim.flavours.length > 1}<select bind:value={sim.flavour} aria-label={t("app.modelSimulator")}>
                     {#each sim.flavours as f}<option value={f}>{f}</option>{/each}</select>{/if}</span>
               {/if}
             </div>
@@ -178,7 +179,7 @@
   </main>
 
   <footer class="glass status num">
-    <span>{online ? (app.writing ? "schreibe …" : "bereit") : "offline"}</span>
+    <span>{online ? (app.writing ? t("app.writing") : t("app.ready")) : "offline"}</span>
     {#if online}
       <span>{app.device.identity.port ? `Port ${app.device.identity.port}` : `Firmware ${app.device.identity.firmware}`}</span>
       {#if app.device.preset.loaded !== null}<span>Preset {app.device.preset.loaded + 1}</span>{/if}
@@ -194,6 +195,7 @@
 
 <style>
   .simpick { display: inline-flex; gap: .4rem; align-items: center; }
+  .lang { font-size: .75rem; font-weight: 650; letter-spacing: .04em; min-width: 2.2rem; }
   .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem minmax(0, 1fr); }
   .side { grid-area: side; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 3; }
   .brand { display: flex; align-items: center; gap: .6rem; padding: .95rem 1rem .6rem; font-weight: 650; letter-spacing: -.01em; }

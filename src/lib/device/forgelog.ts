@@ -1,3 +1,4 @@
+import { t, tk, tx } from "../i18n/index.svelte";
 import { errorName } from "./diagnose";
 
 /**
@@ -8,7 +9,7 @@ import { errorName } from "./diagnose";
 export const LOG_FILE = "FORGE.LOG";
 export const LOG_OLD = "FORGE.OLD";
 export const LOG_FILE_BIT = 4;  // system.debug.out bit 2 (debugout_file)
-export const LOG_LEVELS = ["aus", "fatal", "error", "warn", "info", "debug", "trace", "all"];
+export const LOG_LEVELS = [tk("common.off"), "fatal", "error", "warn", "info", "debug", "trace", "all"];
 
 export interface LogRecord {
   boot: number;
@@ -31,13 +32,13 @@ export function decodeLog(b: Uint8Array): LogRecord[] {
   return out;
 }
 
-const MODULES: Record<number, string> = { 1: "System", 2: "Fehler", 3: "DSP", 4: "Preset", 5: "Versorgung", 6: "Log" };
-export const logModule = (m: number) => MODULES[m] ?? `Modul ${m}`;
+const MODULES: Record<number, string> = { 1: tk("log.system"), 2: tk("common.error"), 3: "DSP", 4: "Preset", 5: tk("log.supply"), 6: "Log" };
+export const logModule = (m: number) => (MODULES[m] ? tx(MODULES[m]) : t("log.moduleN", { n: m }));
 
 function resetCause(f: number): string {
-  const n = [[0, "Einschalten"], [1, "Reset-Pin"], [2, "Unterspannung"], [3, "Watchdog"], [5, "Software"], [4, "Debugger"], [6, "Sicherung"]]
-    .filter(([bit]) => f & (1 << (bit as number))).map(([, t]) => t);
-  return n.length ? n.join(", ") : "unbekannt";
+  const n = [[0, tk("log.power")], [1, "Reset-Pin"], [2, tk("log.brownOut")], [3, "Watchdog"], [5, "Software"], [4, "Debugger"], [6, tk("log.fuse")]]
+    .filter(([bit]) => f & (1 << (bit as number))).map(([, name]) => tx(name as string));
+  return n.length ? n.join(", ") : t("common.unknown");
 }
 
 const bits = (v: number) => "0x" + v.toString(16).toUpperCase().padStart(4, "0");
@@ -46,34 +47,35 @@ const bits = (v: number) => "0x" + v.toString(16).toUpperCase().padStart(4, "0")
 export function logText(r: LogRecord): string {
   switch (r.module) {
     case 1:
-      if (r.event === 1) return `Start (${resetCause(r.p1)})`;
-      if (r.event === 2) return `DSP-Neustart: Bausteine ${bits(r.p1)}${r.p2 ? ", ein Kern meldete einen Fehlerzustand" : ""}`;
-      if (r.event === 3) return `Hardware weicht ab, Ausgänge stumm (DSP ${bits(r.p1)}, andere ${bits(r.p2)})`;
+      if (r.event === 1) return `${t("common.start")} (${resetCause(r.p1)})`;
+      if (r.event === 2) return t("log.dspRestartChipsChips", { chips: bits(r.p1) }) + (r.p2 ? `, ${t("log.coreReportedErrorState")}` : "");
+      if (r.event === 3) return t("log.hardwareDiffersOutputsMuted", { a: bits(r.p1), b: bits(r.p2) });
       break;
     case 2:
-      return `${errorName(r.event)} (Typ ${r.event}), jetzt ${r.p1}×`;
+      return t("log.nameTypeNNow", { name: errorName(r.event), n: r.event, count: r.p1 });
     case 3:
       if (r.event === 1) {
         const ok = (r.p2 & 255) === 1;
-        return `DSP-EEPROM von Kern ${r.p1} neu geschrieben${r.p2 >> 8 > 1 ? ` (${r.p2 >> 8} Versuche)` : ""}, ${ok ? "geprüft" : "Prüfsumme falsch"}`;
+        return t("log.dspEEPROMCoreN", { n: r.p1 }) + (r.p2 >> 8 > 1 ? ` ${t("log.nAttempts", { n: r.p2 >> 8 })}` : "")
+          + `, ${ok ? t("log.verified") : t("common.wrongChecksum")}`;
       }
       if (r.event === 2) {
         const st = r.p2 & 255;
-        return `Kern ${r.p1}: ${st ? `Fehlerzustand ${st}` : "läuft"}`;
+        return `${t("log.coreN", { n: r.p1 })}: ${st ? t("log.errorStateN", { n: st }) : t("log.running")}`;
       }
       break;
     case 4:
-      if (r.event === 1) return `Preset ${r.p1 + 1} geladen`;
-      if (r.event === 2) return `PRESET_${r.p1}.CFG von der Karte geladen`;
+      if (r.event === 1) return t("log.presetNLoaded", { n: r.p1 + 1 });
+      if (r.event === 2) return t("log.presetNCFGLoaded", { n: r.p1 });
       break;
     case 5:
-      if (r.event === 1) return `Versorgung zu niedrig: ${(r.p1 / 1000).toFixed(2)} V`;
-      if (r.event === 2) return `Versorgung wieder gut: ${(r.p1 / 1000).toFixed(2)} V`;
+      if (r.event === 1) return t("log.supplyTooLowV", { v: (r.p1 / 1000).toFixed(2) });
+      if (r.event === 2) return t("log.supplyGoodAgainV", { v: (r.p1 / 1000).toFixed(2) });
       break;
     case 6:
-      if (r.event === 1) return `Log-Datei begonnen (Format ${r.p1}, ${r.p2} Byte je Satz)`;
-      if (r.event === 2) return `${r.p1} Einträge verloren (Warteschlange voll oder keine Karte)`;
+      if (r.event === 1) return t("log.logFileStartedFormat", { f: r.p1, n: r.p2 });
+      if (r.event === 2) return t("log.nEntriesLostQueue", { n: r.p1 });
       break;
   }
-  return `Ereignis ${r.event} (${r.p1}, ${r.p2})`;
+  return `${t("log.eventN", { n: r.event })} (${r.p1}, ${r.p2})`;
 }

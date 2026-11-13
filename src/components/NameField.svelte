@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { t } from "../lib/i18n/index.svelte";
   // A channel name that can be edited in place: looks like text, becomes a field on hover/focus.
   let { value, placeholder, label, onchange }:
     { value: string; placeholder: string; label: string; onchange: (name: string) => void } = $props();
 </script>
 
-<input class="name" {value} {placeholder} aria-label={label} title="Name ändern" maxlength="16" spellcheck="false"
+<input class="name" {value} {placeholder} aria-label={label} title={t("ui.rename")} maxlength="16" spellcheck="false"
   onchange={(e) => onchange(e.currentTarget.value)}
   onkeydown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../lib/i18n/index.svelte";
   // Rotary control: drag up/down, wheel or arrow keys while focused, value editable below.
   let { value, min = 0, max = 100, step = 1, label, caption = "", unit = "", size = 56, disabled = false, display, parse, onchange }:
     { value: number; min?: number; max?: number; step?: number; label: string; caption?: string; unit?: string;
@@ -61,7 +62,7 @@
     <circle class="cap-c" cx="28" cy="28" r="14" />
     <line class="tick" x1="28" y1="28" x2={tip[0]} y2={tip[1]} />
   </svg>
-  <label class="val num"><input value={shown} inputmode="decimal" aria-label="{label}, Wert" {disabled} onchange={typed} />{#if unit}<span>{unit}</span>{/if}</label>
+  <label class="val num"><input value={shown} inputmode="decimal" aria-label="{label}, {t("common.value")}" {disabled} onchange={typed} />{#if unit}<span>{unit}</span>{/if}</label>
 </div>
 
 <style>

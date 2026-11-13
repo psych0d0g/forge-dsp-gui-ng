@@ -1,6 +1,7 @@
 // Biquad coefficients as the firmware computes them (forge-dsp-firmware src/biquad.c, port of
 // the BASCOM functions), for the frequency and phase response shown in the interface.
 import type { Biquad } from "../device/model";
+import { tk } from "../i18n/index.svelte";
 
 /** H(z) = (b0 + b1 z^-1 + b2 z^-2) / (1 + a1 z^-1 + a2 z^-2) */
 export interface Coeffs { b0: number; b1: number; b2: number; a1: number; a2: number }
@@ -21,28 +22,28 @@ export interface TypeInfo {
 }
 
 export const TYPES: TypeInfo[] = [
-  { type: 0, name: "Aus", group: "Aus" },
-  { type: 1, name: "EQ (Güte)", group: "EQ", gain: true, q: true },
-  { type: 18, name: "EQ (Bandbreite)", group: "EQ", gain: true, b: "Bandbreite (Hz)" },
-  { type: 14, name: "Bass-Shelf", group: "EQ", gain: true, q: true },
-  { type: 15, name: "Höhen-Shelf", group: "EQ", gain: true, q: true },
+  { type: 0, name: tk("common.off2"), group: "Aus" },
+  { type: 1, name: tk("filters.eqQ"), group: "EQ", gain: true, q: true },
+  { type: 18, name: tk("filters.eqBandwidth"), group: "EQ", gain: true, b: "Bandbreite (Hz)" },
+  { type: 14, name: tk("filters.bassShelf"), group: "EQ", gain: true, q: true },
+  { type: 15, name: tk("filters.trebleShelf"), group: "EQ", gain: true, q: true },
   { type: 16, name: "Notch", group: "EQ", b: "Bandbreite (Hz)" },
   { type: 17, name: "Bandpass", group: "EQ", q: true, port: true },
-  { type: 2, name: "Tiefpass 6 dB", group: "Tiefpass" },
-  { type: 3, name: "Tiefpass Butterworth 12 dB", group: "Tiefpass" },
-  { type: 5, name: "Tiefpass Linkwitz 12 dB", group: "Tiefpass" },
-  { type: 4, name: "Tiefpass Bessel 12 dB", group: "Tiefpass" },
-  { type: 6, name: "Tiefpass Chebyshev 12 dB", group: "Tiefpass" },
-  { type: 7, name: "Tiefpass, Güte frei", group: "Tiefpass", q: true },
-  { type: 8, name: "Hochpass 6 dB", group: "Hochpass" },
-  { type: 9, name: "Hochpass Butterworth 12 dB", group: "Hochpass" },
-  { type: 11, name: "Hochpass Linkwitz 12 dB", group: "Hochpass" },
-  { type: 10, name: "Hochpass Bessel 12 dB", group: "Hochpass" },
-  { type: 12, name: "Hochpass Chebyshev 12 dB", group: "Hochpass" },
-  { type: 13, name: "Hochpass, Güte frei", group: "Hochpass", q: true },
-  { type: 21, name: "Allpass 1. Ordnung (−90° bei f)", group: "Phase", port: true },
-  { type: 20, name: "Allpass 2. Ordnung (−180° bei f)", group: "Phase", q: true },
-  { type: 22, name: "Phase: Winkel bei f", group: "Phase", q: true, b: "Winkel (°)", port: true },
+  { type: 2, name: tk("filters.lowPass6DB"), group: "Tiefpass" },
+  { type: 3, name: tk("filters.lowPassButterworth12"), group: "Tiefpass" },
+  { type: 5, name: tk("filters.lowPassLinkwitz12"), group: "Tiefpass" },
+  { type: 4, name: tk("filters.lowPassBessel12"), group: "Tiefpass" },
+  { type: 6, name: tk("filters.lowPassChebyshev12"), group: "Tiefpass" },
+  { type: 7, name: tk("filters.lowPassFreeQ"), group: "Tiefpass", q: true },
+  { type: 8, name: tk("filters.highPass6DB"), group: "Hochpass" },
+  { type: 9, name: tk("filters.highPassButterworth12"), group: "Hochpass" },
+  { type: 11, name: tk("filters.highPassLinkwitz12"), group: "Hochpass" },
+  { type: 10, name: tk("filters.highPassBessel12"), group: "Hochpass" },
+  { type: 12, name: tk("filters.highPassChebyshev12"), group: "Hochpass" },
+  { type: 13, name: tk("filters.highPassFreeQ"), group: "Hochpass", q: true },
+  { type: 21, name: tk("filters.allPass1stOrder"), group: "Phase", port: true },
+  { type: 20, name: tk("filters.allPass2ndOrder"), group: "Phase", q: true },
+  { type: 22, name: tk("filters.phaseAngleAtF"), group: "Phase", q: true, b: "Winkel (°)", port: true },
   { type: 19, name: "RIAA", group: "Sonstige" },
 ];
 export const typeInfo = (t: number) => TYPES.find((x) => x.type === t);
