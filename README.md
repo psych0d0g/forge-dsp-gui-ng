@@ -1,15 +1,23 @@
 # Forge DSP GUI NG
 
-Neue Bedienoberfläche für **Forge DSP** und **ETON CORE D8** als Nachfolger der Java-GUI. Eine Web-App, die auf zwei Wegen mit dem Gerät spricht:
+Neue Bedienoberfläche für **Forge DSP** und **ETON CORE D8** als Nachfolger der Java-GUI. Eine Web-App, die auf drei Wegen mit dem Gerät spricht:
 
 | Weg | Wie | Voraussetzung |
 |---|---|---|
-| **USB** | Browser → Web Serial → USB-COM des Forge (CP2102, 38400 8N1) | Chromium-Browser (Chrome, Edge), nichts zu installieren |
+| **Browser, USB** | https://psych0d0g.github.io/forge-dsp-gui-ng/ → Web Serial → USB-COM des Forge (CP2102, 38400 8N1) | Chrome, Edge oder ein Firefox mit Web Serial; nichts zu installieren |
+| **Desktop-App, USB** | Dieselbe Oberfläche als Programm: [Releases](https://github.com/psych0d0g/forge-dsp-gui-ng/releases) (Windows exe, Linux AppImage, macOS dmg). Dateien mit „Speichern unter“, serielle Anschlüsse direkt | nichts weiter; macOS beim ersten Start per Rechtsklick › Öffnen (unsigniert) |
 | **ESP32** | Der ESP32 steckt am RS485-Master/Slave-Port, öffnet ein WLAN und liefert die App selbst aus. Die App spricht per WebSocket, der ESP reicht die Zeilen zur UART durch | ESP32 mit 3,3-V-Full-Duplex-Transceiver, siehe [docs/hardware-esp32.md](docs/hardware-esp32.md) |
 
 Die Firmware des Forge (Original BASCOM 1.11.6000 oder der C-Port [forge-dsp-firmware](https://github.com/psych0d0g/forge-dsp-firmware)) bleibt unverändert, die App nutzt das Textprotokoll.
 
-**Stand:** Läuft unter https://psych0d0g.github.io/forge-dsp-gui-ng/ (zum Ansehen ohne Gerät: `?demo`). Fertig: App-Rahmen (Navigation nach Signalweg, hell/dunkel, Handy), Gerätemodell mit vollständigem Einlesen, Übersicht, Mixer als Mischpult (Kanalzüge mit Eingangspegel, Routing mit Drehreglern, Ausgangsbank, Profile, „All Over“), Filter & EQ (Frequenz- und Phasengang, Filterzüge), Laufzeit, Steuerblöcke, Presets mit Abstimmungsdateien im `.cfg`-Format der Original-GUI, Diagnose, Firmware-Update im Browser, Konsole. Offen: Simulator, Pegelanzeige (braucht Firmware-Unterstützung), siehe Issues. Am echten Gerät sind bisher die verwendeten Befehle geprüft, die Seiten im Browser noch nicht durchgehend.
+**Stand:** Release 1.0.0. Seiten: Übersicht mit Pegeln aller Ein- und Ausgänge, Mixer als Mischpult (Kanalzüge, Routing,
+Ausgangsbank, Profile, „All Over“), Filter & EQ (Frequenz- und Phasengang, Weichenansicht mit elektrischer Summe,
+Kanal kopieren), Laufzeit, Steuerblöcke, Presets mit Abstimmungsdateien im `.cfg`-Format der Original-GUI,
+Biquad-Verteilung, Diagnose mit Log der Speicherkarte, Speicherkarte, Firmware-Update im Browser (auch direkt aus den
+Firmware-Releases), Einstellungen, Konsole. In der Kopfzeile Ausgangspegel und Master-Lautstärke. Viele Funktionen
+nutzen die Erweiterungen der Port-Firmware ab 2.1.0; mit der Original-Firmware 1.11.6000 funktioniert alles, was diese
+kann. Zum Ansehen ohne Gerät: `?demo`. Am DEV-Gerät (Forge 96ELN) im Browser geprüft: Verbinden, Pegel, Speicherkarte
+und Log, Firmware-Update aus dem Release.
 
 ## Aufbau
 
@@ -39,6 +47,10 @@ pio run             # Firmware, bettet ../dist/index.html.gz ein (ohne Build: Pl
 pio run -t upload   # flashen
 pio run -t menuconfig   # WLAN-Name/-Passwort, UART-Pins, Baudrate ("Forge bridge")
 ```
+
+Desktop-App (Electron, `desktop/`): `npm run build`, dann `dist/index.html` nach `desktop/app/` kopieren und in
+`desktop/` `npm ci && npm run dist`. Die Builds für alle drei Systeme macht `.github/workflows/desktop.yml` (Tag `v*`:
+an das Release, „Run workflow“: nur Artefakte).
 
 Der ESP32 öffnet standardmäßig das WLAN `forge-dsp` (Passwort `forge-dsp-setup`, bitte in menuconfig ändern), die App liegt unter http://192.168.4.1/. Optional tritt er zusätzlich einem bestehenden WLAN bei.
 

@@ -73,6 +73,7 @@ jobs:
     needs: app
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4   # release notes from docs/releases
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -82,7 +83,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd out && sha256sum * > SHA256SUMS && cat SHA256SUMS
+          v="${GITHUB_REF_NAME#v}"
+          notes=(--notes "Desktop-App der Forge-DSP-GUI: Linux (AppImage), Windows (exe), macOS (dmg). Web: https://psych0d0g.github.io/forge-dsp-gui-ng/")
+          [ -f "$GITHUB_WORKSPACE/docs/releases/$v.md" ] && notes=(--notes-file "$GITHUB_WORKSPACE/docs/releases/$v.md")
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Forge DSP ${GITHUB_REF_NAME#v}" \
-              --notes "Desktop-App der Forge-DSP-GUI: Linux (AppImage), Windows (exe, portabel oder mit Installer), macOS (dmg, Intel und Apple Silicon). Die Web-Version bleibt unter https://psych0d0g.github.io/forge-dsp-gui-ng/."
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Forge DSP GUI $v" "${notes[@]}"
           gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber *

@@ -1,7 +1,7 @@
 {
   "name": "forge-dsp-desktop",
   "productName": "Forge DSP",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Forge DSP GUI as a desktop app: serial ports and files without a browser",
   "author": "forge-dsp-gui-ng",
   "license": "MIT",
@@ -54,7 +54,11 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "forge-dsp-${version}-win-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "forge-dsp-${version}-win-${arch}-portable.${ext}"
     }
   },
   "desktopName": "forge-dsp.desktop"
