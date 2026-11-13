@@ -27,7 +27,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage",
+      "msi",
+      "app",
+      "dmg"
+    ],
     "category": "Utility",
     "shortDescription": "Bedienoberfläche für Forge DSP und ETON CORE D8",
     "icon": [
