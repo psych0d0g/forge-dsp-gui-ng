@@ -92,6 +92,8 @@ export interface DeviceState {
   vu: number[] | null;
   /** output levels 1..8, same scale (system.vu.out, forge-dsp-firmware#52); null = not available */
   vuOut: number[] | null;
+  /** event values read with event.N.value (the master fader uses those of the volume block) */
+  events: Record<number, number>;
   /** MCU temperature in °C */
   temperature: number | null;
 }
@@ -121,6 +123,7 @@ export function emptyState(): DeviceState {
     supply: null,
     vu: null,
     vuOut: null,
+    events: {},
     temperature: null,
   };
 }
@@ -290,6 +293,9 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
         return true;
       }
       return p[1] === "version" && p.length === 3;
+    case "event":
+      if (p.length === 3 && p[2] === "value" && Number.isFinite(n(1))) { s.events[n(1)] = Number(v); return true; }
+      return false;
     case "preset":
       if (p[1] === "loaded") s.preset.loaded = num(v);
       else if (p[1] === "select") s.preset.select = num(v);

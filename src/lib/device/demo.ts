@@ -56,6 +56,7 @@ export function demoState(): DeviceState {
   s.temperature = 38.5;
   s.vu = [0, 0, 0, 0, 0, 0, 215, 213];
   s.vuOut = [200, 197, 196, 193, 180, 178, 150, 148];
+  s.events = { 58: 231, 59: 231 };  // volume block 2: -12 dB
   return s;
 }
 
@@ -122,6 +123,7 @@ export class DemoTransport implements Transport {
   sd = new DemoCard();
   errors = "[[129,1],[3,2]]";
   dbgOut = 4;
+  events: Record<number, number> = { 58: 231, 59: 231 };
   dbgMode = 4;
   /** a simulated bootloader target, so the firmware page can be tried without a device */
   bytes = new SimTarget();
@@ -133,6 +135,9 @@ export class DemoTransport implements Transport {
     if (!m) return;
     let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
     if (m[1] === "set" && m[3] === "system.errors") this.errors = "[]";
+    const ev = /^event\.(\d+)\.value$/.exec(m[3]);
+    if (ev && m[1] === "set") this.events[Number(ev[1])] = Number(/=(\d+)/.exec(line)?.[1] ?? 0);
+    if (ev && m[1] === "get") out = ` <.1 ${m[3]}=${this.events[Number(ev[1])] ?? 255}`;
     if (m[1] === "set" && m[3] === "system.debug.out") this.dbgOut = Number(/=(\d+)/.exec(line)?.[1] ?? 0);
     if (m[1] === "set" && m[3] === "system.debug.mode") this.dbgMode = Number(/=(\d+)/.exec(line)?.[1] ?? 0);
     if (m[1] === "get" && m[3] === "system.debug.out") out = ` <.1 system.debug.out=${this.dbgOut}`;

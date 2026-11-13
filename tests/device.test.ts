@@ -413,3 +413,23 @@ describe("crossover sum (#5)", () => {
     expect(sumResponse([a, b], [1000], 96000).db[0]).toBeLessThan(-60);
   });
 });
+
+import { masterDb, masterOf, masterValue } from "../src/lib/device";
+describe("master volume (#3)", () => {
+  it("uses the volume block's events, 255 = 0 dB, 0.5 dB per step", () => {
+    const s = emptyState();
+    expect(masterOf(s)).toBeNull();
+    s.modc[4] = { enable: 1, type: 16, flags: [255, 0, 0, 0], events: [58, 59, 0, 0], sets: [0, 0, 0, 0] };
+    s.modc[2] = { enable: 0, type: 16, flags: [0, 0, 0, 0], events: [1, 2, 0, 0], sets: [0, 0, 0, 0] };     // off: ignored
+    expect(masterOf(s)).toEqual({ block: 4, odd: 58, even: 59 });
+    s.modc[4].events = [58, 0, 0, 0];
+    expect(masterOf(s)).toEqual({ block: 4, odd: 58, even: 58 });                                     // one event for all
+    expect(masterDb(255)).toBe(0);
+    expect(masterDb(231)).toBe(-12);
+    expect(masterValue(-12)).toBe(231);
+    expect(masterValue(-200)).toBe(0);
+    const ap = (l: string) => applyAnswer(s, parseAnswer(l)!);
+    expect(ap(" <.1 event.58.value=200")).toBe(true);
+    expect(s.events[58]).toBe(200);
+  });
+});

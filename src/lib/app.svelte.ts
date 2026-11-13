@@ -3,7 +3,7 @@ import { ForgeClient, type Answer, type Value } from "./protocol";
 import type { ByteLink, Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
 import { openWebSocket } from "./transport/websocket";
-import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
+import { applyAnswer, emptyState, inputDefaultName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
@@ -53,6 +53,7 @@ export async function connect(kind: "usb" | "esp" | "demo") {
       app.demo = false;
       app.status = "reading";
       app.device = await readDevice(client!, (p) => (app.progress = p));
+      await readMaster();
       app.progress = null;
       if (!app.device.identity.keyInfo && !app.device.identity.firmware) throw new Error("Kein Forge antwortet an diesem Anschluss.");
     }
@@ -79,8 +80,30 @@ export async function reload() {
   if (!client || app.demo) return;
   app.status = "reading";
   app.device = await readDevice(client, (p) => (app.progress = p));
+  await readMaster();
   app.progress = null;
   app.status = "online";
+}
+
+// --- master volume (GUI-#3): the event values of the MODC volume block -------------------------------
+/** events of the master to read: both volume events of the volume block */
+const masterRegs = () => {
+  const m = masterOf(app.device);
+  return m ? [...new Set([m.odd, m.even])].map((e) => `event.${e}.value`) : [];
+};
+async function readMaster() {
+  if (!client) return;
+  for (const r of masterRegs())
+    try { for (const a of await client.get(r)) applyAnswer(app.device, a); } catch { /* no answer: shown as unknown */ }
+}
+/** master as event value 0..255 (255 = 0 dB); both events of the volume block, throttled like a fader */
+export function setMaster(v: number) {
+  const m = masterOf(app.device);
+  if (!m) return;
+  for (const e of new Set([m.odd, m.even])) {
+    app.device.events[e] = v;
+    write(`event.${e}.value`, v);
+  }
 }
 
 /** one read for a page (diagnostics); answers also go into the model */
@@ -289,8 +312,10 @@ async function poll() {
   if (app.device.vu !== null) regs.push("system.vu");
   // output levels: the meter in the header shows their sum
   if (app.device.vuOut !== null) regs.push("system.vu.out");
-  if (tick % STATUS_EVERY === 0)
+  if (tick % STATUS_EVERY === 0) {
     for (const r of STATUS_REGS) if (!r.port || isPort(app.device)) regs.push(r.reg);
+    regs.push(...masterRegs());  // a rotary encoder or the IR remote may have moved it
+  }
   if (!regs.length) return;
   polling = true;
   try {
