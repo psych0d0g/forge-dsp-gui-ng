@@ -5,15 +5,16 @@ import { simFlavours, simTransport, type SimModule, type SimStore } from "../src
 
 /** a stand-in for the emscripten module: answers ping, keeps one value in the EEPROM */
 function fakeModule() {
-  const heap = new Uint8Array(8192);
+  const heap = new Uint8Array(4096 + 65536 + 4096);   // eeprom, at24, output
   let out = "", resets = 0, pending = 0, boots = 0;
   const enc = new TextEncoder();
   const m: SimModule = {
     HEAPU8: heap,
     _sim_eeprom: () => 0,
+    _sim_at24: () => 4096,
     _sim_boot: () => { boots++; const r = pending; pending = 0; return r; },
     _sim_loop: () => undefined,
-    _sim_output: () => { const b = enc.encode(out + "\0"); heap.set(b, 4096); out = ""; return 4096; },
+    _sim_output: () => { const b = enc.encode(out + "\0"); heap.set(b, 69632); out = ""; return 69632; },
     _sim_reset_pending: () => pending,
     ccall: (_n, _r, _t, [line]) => {
       const l = String(line);
@@ -72,6 +73,8 @@ describe.skipIf(!real)("simulator with the real firmware (V40-96ELN)", () => {
     const s = await readDevice(c, () => undefined);
     expect(s.identity.keyInfo).toContain("-96ELN-4.0-");
     expect(s.gain.out.length).toBe(8);
+    expect(s.preset.loaded).toBe(0);          // factory defaults written, preset 0 loaded in the main loop
+    expect(s.errors).toEqual([]);
     await c.set("gain.out.3", 180);
     expect((await c.get("gain.out.3"))[0].value).toBe(180);
     await t.close();

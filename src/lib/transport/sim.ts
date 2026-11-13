@@ -7,6 +7,7 @@ import { LineSplitter, type Transport } from "./types";
 /** what an emscripten module of tools/sim offers (host_iface.c, #ifdef SIM) */
 export interface SimModule {
   _sim_eeprom(): number;
+  _sim_at24(): number;
   _sim_boot(): number;
   _sim_loop(ms: number): void;
   _sim_output(): number;
@@ -18,7 +19,9 @@ export interface SimModule {
 
 export const SIM_BASE = "./sim/";
 export const EEPROM_SIZE = 4096;
+export const AT24_SIZE = 65536;   // preset EEPROM
 const LOOP_MS = 50;
+const BOOT_MS = 3000;             // the firmware loads the preset in its main loop
 
 /** where the EEPROM of a simulated flavour is kept between visits */
 export interface SimStore { load(key: string): Uint8Array | null; save(key: string, data: Uint8Array): void }
@@ -30,7 +33,9 @@ export const browserStore: SimStore = {
     } catch { return null; }
   },
   save(key, data) {
-    try { localStorage.setItem(key, btoa(String.fromCharCode(...data))); } catch { /* private mode: not kept */ }
+    let bin = "";
+    for (let i = 0; i < data.length; i += 8192) bin += String.fromCharCode(...data.subarray(i, i + 8192));
+    try { localStorage.setItem(key, btoa(bin)); } catch { /* private mode or full: not kept */ }
   },
 };
 
@@ -46,11 +51,24 @@ export async function simFlavours(base = SIM_BASE, get: typeof fetch = fetch): P
 
 /** a transport to a simulated Forge on an already loaded module */
 export function simTransport(m: SimModule, flavour: string, store: SimStore = browserStore, loopMs = LOOP_MS): Transport {
-  const key = `forge-sim-eeprom-${flavour}`;
-  const ee = () => m.HEAPU8.subarray(m._sim_eeprom(), m._sim_eeprom() + EEPROM_SIZE);
-  const saved = store.load(key);
-  ee().set(saved && saved.length === EEPROM_SIZE ? saved : new Uint8Array(EEPROM_SIZE).fill(0xff));
-  m._sim_boot();
+  // the MCU EEPROM and the preset EEPROM (AT24) of this flavour, kept between visits
+  const mems = [
+    { key: `forge-sim-eeprom-${flavour}`, at: () => m._sim_eeprom(), size: EEPROM_SIZE },
+    { key: `forge-sim-at24-${flavour}`, at: () => m._sim_at24(), size: AT24_SIZE },
+  ];
+  const view = (x: (typeof mems)[number]) => m.HEAPU8.subarray(x.at(), x.at() + x.size);
+  for (const x of mems) {
+    const saved = store.load(x.key);
+    view(x).set(saved && saved.length === x.size ? saved : new Uint8Array(x.size).fill(0xff));
+  }
+  const save = () => mems.forEach((x) => store.save(x.key, view(x).slice()));
+  const boot = () => {
+    m._sim_boot();
+    if (m._sim_reset_pending()) m._sim_boot();   // blank EEPROM: factory defaults, then the restart
+    m._sim_loop(BOOT_MS);
+    m._sim_output();                             // the start is not for the GUI
+  };
+  boot();
   const listeners: ((l: string) => void)[] = [];
   const split = new LineSplitter((l) => listeners.forEach((f) => f(l)));
   let dirty = false;
@@ -58,14 +76,14 @@ export function simTransport(m: SimModule, flavour: string, store: SimStore = br
     const out = m.UTF8ToString(m._sim_output());
     if (out) split.push(out);
     if (m._sim_reset_pending()) {      // system.boot, factory reset: the device restarts
-      store.save(key, ee().slice());
-      m._sim_boot();
+      save();
+      boot();
     }
   };
   const timer = setInterval(() => {
     m._sim_loop(loopMs);
     drain();
-    if (dirty) { store.save(key, ee().slice()); dirty = false; }
+    if (dirty) { save(); dirty = false; }
   }, loopMs);
   return {
     name: `Simulator (${flavour})`,
@@ -81,7 +99,7 @@ export function simTransport(m: SimModule, flavour: string, store: SimStore = br
     onLine: (fn) => listeners.push(fn),
     close: async () => {
       clearInterval(timer);
-      store.save(key, ee().slice());
+      save();
     },
   };
 }
@@ -96,5 +114,8 @@ export async function openSim(flavour: string, base = SIM_BASE): Promise<Transpo
 
 /** forget the simulated EEPROM (factory state on the next connect) */
 export function simForget(flavour: string) {
-  try { localStorage.removeItem(`forge-sim-eeprom-${flavour}`); } catch { /* nothing kept */ }
+  try {
+    localStorage.removeItem(`forge-sim-eeprom-${flavour}`);
+    localStorage.removeItem(`forge-sim-at24-${flavour}`);
+  } catch { /* nothing kept */ }
 }
