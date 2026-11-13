@@ -4,7 +4,9 @@ name: pages
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:      # also after a firmware release, to offer it at once
+  schedule:
+    - cron: "17 4 * * *"  # daily: picks up new firmware releases
 
 permissions:
   contents: read
@@ -30,6 +32,10 @@ jobs:
       - run: npm run build
       - name: Only the page itself
         run: mkdir site && cp dist/index.html site/
+      - name: Firmware releases next to the page (GitHub serves release assets without CORS)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/fetch-firmware.mjs site/firmware
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -4,6 +4,7 @@
   import { APP_SIZE, imageKnows } from "../lib/boot/client";
   import { HexError, parseHex } from "../lib/boot/ihex";
   import { runUpdate, STEP_LABEL, UpdateError, type Step } from "../lib/boot/update";
+  import { assetsFor, fetchAsset, loadReleases, type Release } from "../lib/boot/releases";
 
   const d = $derived(app.device);
   const id = $derived(d.identity);
@@ -25,20 +26,62 @@
       query("i2c.1.scan").then((a) => { const s = parseScan(a[0]?.value); if (s.length) hasClock = s.includes(0xe0) || s.includes(0xe2); });
   });
 
-  async function pick(e: Event) {
-    const f = (e.currentTarget as HTMLInputElement).files?.[0];
-    (e.currentTarget as HTMLInputElement).value = "";
+  /** a .hex (from the PC or a release) as the image to write; the checks below apply to both */
+  async function useHex(name: string, text: () => Promise<string>) {
     file = null; fileError = ""; result = null; understood = false;
-    if (!f) return;
     try {
-      const image = parseHex(await f.text());
+      const image = parseHex(await text());
       if (!image.length) throw new HexError("Die Datei enthält keine Daten.");
       if (image.length > APP_SIZE) throw new HexError("Das Image ist größer als der Anwendungsbereich des Forge.");
       const h = new Uint8Array(await crypto.subtle.digest("SHA-256", image as BufferSource));
-      file = { name: f.name, image, sha: [...h].map((b) => b.toString(16).padStart(2, "0")).join("") };
+      file = { name, image, sha: [...h].map((b) => b.toString(16).padStart(2, "0")).join("") };
     } catch (x) {
       fileError = x instanceof Error ? x.message : String(x);
     }
+  }
+  async function pick(e: Event) {
+    const f = (e.currentTarget as HTMLInputElement).files?.[0];
+    (e.currentTarget as HTMLInputElement).value = "";
+    if (f) await useHex(f.name, () => f.text());
+  }
+
+  // --- releases next to the page (Pages build copies them from GitHub, #10) ---
+  let releases = $state<Release[] | null>(null);
+  let relTag = $state("");
+  let relFile = $state("");
+  let relBusy = $state(false);
+  $effect(() => {  // once; a result after leaving the page is dropped
+    let alive = true;
+    loadReleases().then((r) => {
+      if (!alive) return;
+      releases = r?.length ? r : null;
+      relTag = r?.find((x) => !x.prerelease)?.tag ?? r?.[0]?.tag ?? "";
+    });
+    return () => { alive = false; };
+  });
+  const rel = $derived(releases?.find((r) => r.tag === relTag) ?? null);
+  const fitting = $derived(rel && id.model ? assetsFor(rel, id.model, id.pcb, hasClock) : []);
+  const others = $derived(rel ? rel.assets.filter((a) => !fitting.includes(a)) : []);
+  $effect(() => {  // propose the file of this device whenever the release or the device changes
+    rel; fitting;
+    relFile = fitting[0]?.file ?? "";
+  });
+  /** newest port release newer than what runs ("2.0.0-19-g…" counts as 2.0.0) */
+  const newer = $derived.by(() => {
+    const cur = /^(\d+)\.(\d+)\.(\d+)/.exec(id.port ?? "");
+    const top = releases?.find((r) => !r.original && !r.prerelease);
+    const t = top && /^v(\d+)\.(\d+)\.(\d+)$/.exec(top.tag);
+    if (!cur || !t) return null;
+    const a = cur.slice(1).map(Number), b = t.slice(1).map(Number);
+    const cmp = b[0] - a[0] || b[1] - a[1] || b[2] - a[2];
+    return cmp > 0 ? top : null;
+  });
+  async function loadRelease() {
+    const a = rel?.assets.find((x) => x.file === relFile);
+    if (!rel || !a) return;
+    relBusy = true;
+    await useHex(a.file, () => fetchAsset(rel, a));
+    relBusy = false;
   }
 
   // checks before writing: [state, text]; "bad" blocks, "warn" needs the tick below
@@ -123,6 +166,30 @@
         die Port-Firmware braucht den Taster am Gerät und das Werkzeug <code>c45b3</code> aus dem Firmware-Repository. Danach gehen
         Updates von hier.</p>
     {:else}
+      <div class="relwrap">
+      {#if releases}
+        <div class="rel">
+          {#if newer}<p class="new">Neue Version verfügbar: <strong>{newer.name}</strong> vom {newer.date}.</p>{/if}
+          <div class="relrow">
+            <label>Release
+              <select bind:value={relTag} disabled={running || relBusy}>
+                {#each releases as r}<option value={r.tag}>{r.name}{r.original ? " (Original)" : ""} · {r.date}</option>{/each}
+              </select>
+            </label>
+            <label>Datei
+              <select bind:value={relFile} disabled={running || relBusy}>
+                {#if fitting.length}<optgroup label="passt zu diesem Gerät">{#each fitting as a}<option value={a.file}>{a.file}</option>{/each}</optgroup>{/if}
+                {#if others.length}<optgroup label="für andere Geräte">{#each others as a}<option value={a.file}>{a.file}</option>{/each}</optgroup>{/if}
+              </select>
+            </label>
+            <button onclick={loadRelease} disabled={running || relBusy || !relFile}>{relBusy ? "Lade …" : "Laden"}</button>
+          </div>
+          {#if rel}<p class="muted small"><a href={rel.url} target="_blank" rel="noreferrer">Release-Notizen</a> · geladen von dieser Seite,
+            geprüft gegen die Prüfsumme des Release</p>{/if}
+        </div>
+        <p class="muted small or">oder eine Datei vom Rechner:</p>
+      {/if}
+      </div>
       <label class="filebtn" class:disabled={running}>Firmware-Datei wählen …<input type="file" accept=".hex" onchange={pick} disabled={running} /></label>
       {#if fileError}<p class="bad">{fileError}</p>{/if}
       {#if file}
@@ -180,6 +247,14 @@
   .filebtn.disabled { opacity: .45; cursor: default; }
   .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
   .filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .relwrap { display: grid; gap: .45rem; }
+  .relwrap:empty { display: none; }
+  .rel { display: grid; gap: .45rem; }
+  .relrow { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
+  .relrow label { display: grid; gap: .2rem; font-size: .8rem; color: var(--muted); min-width: 0; }
+  .relrow select { font: inherit; font-size: .88rem; padding: .3rem .45rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); max-width: 100%; }
+  .new { margin: 0; color: var(--accent); }
+  .or { margin: .2rem 0 0; }
   .checks { margin: 0; padding: 0; list-style: none; display: grid; gap: .3rem; }
   .checks li { padding-left: 1.1rem; position: relative; }
   .checks li::before { content: ""; position: absolute; left: 0; top: .5em; width: .55rem; height: .55rem; border-radius: 50%; background: var(--ok); }
