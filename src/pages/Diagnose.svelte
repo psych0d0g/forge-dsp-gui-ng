@@ -308,11 +308,11 @@
 
 <style>
   .head { margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
-  .acts { display: flex; gap: .5rem; }
+  .acts { display: flex; gap: .5rem; flex-wrap: wrap; }
   .acts button { display: inline-flex; align-items: center; gap: .4rem; }
   .tiles { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); margin-bottom: .75rem; align-items: start; }
-  .tile { padding: .9rem 1rem; display: grid; gap: .6rem; align-content: start; }
-  .tilehead { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .tile { padding: .9rem 1rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; align-content: start; }
+  .tilehead { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .tilehead h3 { margin: 0; }
   .err { color: var(--err); margin: 0; }
   .log { margin-top: .75rem; }

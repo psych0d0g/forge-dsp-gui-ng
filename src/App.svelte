@@ -96,7 +96,7 @@
       <div><strong>{title}</strong>
         <span class="muted sub">{online ? `${app.transportName}${app.demo ? " (ohne Gerät)" : ""}` : app.status === "offline" ? "nicht verbunden" : "verbinde …"}</span></div>
     </div>
-    {#if online}<VuMeter /><MasterFader />{/if}
+    {#if online}<div class="live"><VuMeter /><MasterFader /></div>{/if}
     <div class="actions">
       {#if online}
         {#if !app.demo}<button class="ghost" title="Alles neu einlesen" onclick={reload}><Icon name="refresh" /></button>{/if}
@@ -190,7 +190,7 @@
 
 <style>
   .simpick { display: inline-flex; gap: .4rem; align-items: center; }
-  .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem 1fr; }
+  .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem minmax(0, 1fr); }
   .side { grid-area: side; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 3; }
   .brand { display: flex; align-items: center; gap: .6rem; padding: .95rem 1rem .6rem; font-weight: 650; letter-spacing: -.01em; }
   .logo { width: 1.6rem; height: 1.6rem; border-radius: 7px; display: grid; place-items: center; font-weight: 800;
@@ -211,6 +211,7 @@
   .device strong { display: block; line-height: 1.2; }
   .sub { font-size: .8rem; }
   .actions { display: flex; align-items: center; gap: .4rem; }
+  .live { display: flex; align-items: center; gap: .75rem; min-width: 0; }
   .actions button { display: inline-flex; align-items: center; gap: .4rem; }
 
   main { grid-area: main; overflow: auto; padding: 1.25rem; display: flex; flex-direction: column; min-height: 0; }
@@ -227,12 +228,17 @@
   .scrim { display: none; }
 
   @media (max-width: 52rem) {
-    .shell { grid-template: "top" auto "main" 1fr "status" auto / 1fr; }
+    .shell { grid-template: "top" auto "main" 1fr "status" auto / minmax(0, 1fr); }
     .side { position: fixed; inset: 0 auto 0 0; width: 15rem; transform: translateX(-100%); transition: transform .18s; }
     .nav-open .side { transform: none; }
     .nav-open .scrim { display: block; position: fixed; inset: 0; z-index: 2; background: rgba(0, 0, 0, .45); border: 0; border-radius: 0; padding: 0; }
     .menu { display: inline-flex; }
     main { padding: .9rem; }
     .status span:not(:first-child):not(.right) { display: none; }
+  }
+  /* phone: level and master in a row of their own below the device */
+  @media (max-width: 40rem) {
+    .top { flex-wrap: wrap; row-gap: .4rem; padding: .5rem .75rem; }
+    .live { order: 3; flex-basis: 100%; justify-content: space-between; }
   }
 </style>

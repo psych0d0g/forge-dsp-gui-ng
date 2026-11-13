@@ -9,3 +9,7 @@ __pycache__/
 
 # simulator built by CI from forge-dsp-firmware tools/sim
 tests/sim/
+
+# end-to-end test results
+test-results/
+playwright-report/

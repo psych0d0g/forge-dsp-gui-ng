@@ -22,6 +22,7 @@ export const EEPROM_SIZE = 4096;
 export const AT24_SIZE = 65536;   // preset EEPROM
 const LOOP_MS = 50;
 const BOOT_MS = 3000;             // the firmware loads the preset in its main loop
+const SAVE_TICKS = 20;            // look for changed EEPROM contents once a second
 
 /** where the EEPROM of a simulated flavour is kept between visits */
 export interface SimStore { load(key: string): Uint8Array | null; save(key: string, data: Uint8Array): void }
@@ -61,7 +62,14 @@ export function simTransport(m: SimModule, flavour: string, store: SimStore = br
     const saved = store.load(x.key);
     view(x).set(saved && saved.length === x.size ? saved : new Uint8Array(x.size).fill(0xff));
   }
-  const save = () => mems.forEach((x) => store.save(x.key, view(x).slice()));
+  // kept when the firmware changed it: it writes its EEPROMs on its own schedule, seconds after a set
+  const kept = mems.map((x) => view(x).slice());
+  const save = (force = false) => mems.forEach((x, i) => {
+    const now = view(x);
+    if (!force && now.every((b, j) => b === kept[i][j])) return;
+    kept[i] = now.slice();
+    store.save(x.key, kept[i]);
+  });
   const boot = () => {
     m._sim_boot();
     if (m._sim_reset_pending()) m._sim_boot();   // blank EEPROM: factory defaults, then the restart
@@ -71,19 +79,19 @@ export function simTransport(m: SimModule, flavour: string, store: SimStore = br
   boot();
   const listeners: ((l: string) => void)[] = [];
   const split = new LineSplitter((l) => listeners.forEach((f) => f(l)));
-  let dirty = false;
+  let ticks = 0;
   const drain = () => {
     const out = m.UTF8ToString(m._sim_output());
     if (out) split.push(out);
     if (m._sim_reset_pending()) {      // system.boot, factory reset: the device restarts
-      save();
+      save(true);
       boot();
     }
   };
   const timer = setInterval(() => {
     m._sim_loop(loopMs);
     drain();
-    if (dirty) { save(); dirty = false; }
+    if (++ticks % SAVE_TICKS === 0) save();
   }, loopMs);
   return {
     name: `Simulator (${flavour})`,
@@ -91,7 +99,6 @@ export function simTransport(m: SimModule, flavour: string, store: SimStore = br
       for (const line of text.split(/\r?\n/)) {
         if (!line.trim()) continue;
         m.ccall("sim_command", null, ["string"], [line]);
-        if (/^set\./.test(line)) dirty = true;
       }
       await Promise.resolve();        // answers arrive after write() returns, as on a real port
       drain();
@@ -99,7 +106,7 @@ export function simTransport(m: SimModule, flavour: string, store: SimStore = br
     onLine: (fn) => listeners.push(fn),
     close: async () => {
       clearInterval(timer);
-      save();
+      save(true);
     },
   };
 }

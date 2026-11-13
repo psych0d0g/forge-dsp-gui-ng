@@ -27,9 +27,14 @@ src/lib/transport/  Web Serial (USB) und WebSocket (ESP32) hinter einer Schnitts
 src/lib/device/     Gerätemodell: Zustand, Einlesen, Übernahme von Antworten und Ereignissen, Demo-Gerät
 src/lib/app.svelte.ts  Zustand der App (Verbindung, Gerät, Schreiben mit Drosselung)
 src/App.svelte      App-Rahmen; src/pages/ Seiten, src/components/ Bedienelemente (Svelte 5)
-tests/              Vitest, Antworten wie sie die Firmware sendet
+tests/              Vitest, Antworten wie sie die Firmware sendet; tests/e2e/ Playwright gegen den Simulator
 esp32/              ESP-IDF-Firmware der Brücke (PlatformIO), bettet die gebaute App ein
 ```
+
+Simulator: Mit `?sim` (oder dem Knopf „Simulator“ auf der Startseite) läuft die echte Firmware als WebAssembly im
+Browser, ohne Gerät (`src/lib/transport/sim.ts`, gebaut aus `tools/sim` der Firmware). EEPROM und Presets bleiben je
+Modell im Browser. Pegelanzeige und Bootloader gibt es dort nicht. Die Ende-zu-Ende-Tests (`tests/e2e/`) bedienen die
+gebaute Seite damit Klick für Klick, auch in Handybreite.
 
 Die Protokoll-Logik steckt komplett in der Web-App. Der ESP32 ist nur Webserver und Brücke WebSocket ↔ UART, damit es die Logik nur einmal gibt.
 
@@ -41,6 +46,10 @@ npm test            # Protokoll-Tests
 npm run check       # Typprüfung
 npm run dev         # Entwicklungsserver (USB per Web Serial)
 npm run build       # dist/index.html (eine Datei) und dist/index.html.gz für den ESP32
+
+scripts/build-sim.sh tests/sim V40-96ELN   # Simulator: die Firmware als WebAssembly (emsdk, holt forge-dsp-firmware)
+npm run e2e         # Playwright: dist/ im Browser gegen den Simulator (vorher build; PW_CHROMIUM=/usr/bin/chromium
+                    # nimmt das Chromium des Systems)
 
 cd esp32
 pio run             # Firmware, bettet ../dist/index.html.gz ein (ohne Build: Platzhalterseite)

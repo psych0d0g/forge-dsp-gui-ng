@@ -144,9 +144,9 @@
 </section>
 
 <style>
-  .block { padding: .9rem 1rem; display: grid; gap: 1.3rem; margin-top: .9rem; }
+  .block { padding: .9rem 1rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.3rem; margin-top: .9rem; }
   .dragging { cursor: col-resize; }
-  .core { display: grid; gap: .55rem; }
+  .core { display: grid; grid-template-columns: minmax(0, 1fr); gap: .55rem; }
   .corehead { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   .cname { font-weight: 600; font-size: .88rem; }
   .bar { display: flex; height: 2.1rem; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); user-select: none; touch-action: none; }
