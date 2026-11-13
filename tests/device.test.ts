@@ -363,3 +363,20 @@ describe("biquad pools (forge-dsp-firmware#47)", () => {
     expect(lostBands(s, k, [60, 40, 58, 38])).toEqual([{ ch: 2, bands: [50] }]);
   });
 });
+
+import { planCopy } from "../src/lib/device";
+describe("copy a channel (#5)", () => {
+  const bq = (type: number, f = 1000, gain = 0) => ({ type, f, gain, q: 707, b: 0, flags: 0x80 });
+  it("makes the target equal, writes only what differs, reports what does not fit", () => {
+    const src = { 1: bq(1, 100, 30), 2: bq(0), 3: bq(4, 2000), 4: bq(1, 8000, -20) };
+    const dst = { 1: bq(1, 100, 30), 2: bq(1, 500, 10), 3: bq(0) };
+    const p = planCopy(src, dst);
+    expect(p.writes.map(([n]) => n)).toEqual([2, 3]);          // 1 is already equal
+    expect(p.writes[0][1].type).toBe(0);                       // place 2 cleared
+    expect(p.writes[1][1]).toEqual(bq(4, 2000));
+    expect(p.lost).toEqual([4]);                               // the target has only 3 places
+  });
+  it("empty places compare equal whatever their stored values", () => {
+    expect(planCopy({ 1: { type: 0, f: 5, gain: 1, q: 1, b: 1, flags: 0 } }, { 1: { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 } }).writes).toEqual([]);
+  });
+});

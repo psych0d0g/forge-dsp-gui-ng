@@ -2,7 +2,7 @@
   import { tick, untrack } from "svelte";
   import { app, outName, setPoolLengths, write } from "../lib/app.svelte";
   import { channelColor } from "../lib/channelColors";
-  import { isPort, limitsOf, poolOf, proposeGrow, sumsActiveAnywhere, type Biquad } from "../lib/device";
+  import { isPort, limitsOf, planCopy, poolOf, proposeGrow, sumsActiveAnywhere, type Biquad } from "../lib/device";
   import { isActive, typeInfo, TYPES, viewRange } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
@@ -80,6 +80,29 @@
     return b >= 0 ? String(b + 1) : String.fromCharCode(65 + Math.max(0, filters.findIndex((s) => s.n === n)));
   };
   const free = $derived(slots.length - used.length);
+
+  // copy this channel onto others (#5)
+  let copyOpen = $state(false);
+  let copyTo = $state<number[]>([]);
+  let copyNote = $state("");
+  function copyNow() {
+    const plans = copyTo.map((c) => ({ c, ...planCopy(d.biquads[ch], d.biquads[c]) }));
+    const lost = plans.filter((p) => p.lost.length);
+    const text = `Filter und EQ von ${chName(ch)} nach ${copyTo.map(chName).join(", ")} kopieren?\n` +
+      "Dort werden alle Plätze überschrieben." +
+      (lost.length ? `\n\nPasst nicht (zu wenig Plätze):\n${lost.map((p) => `${chName(p.c)}: Band ${p.lost.join(", ")}`).join("\n")}` : "");
+    if (!confirm(text)) return;
+    let n = 0;
+    for (const p of plans)
+      for (const [slot, bq] of p.writes) {
+        d.biquads[p.c][slot] = bq;
+        send(p.c, slot, bq);
+        n++;
+      }
+    copyNote = n ? `${n} Plätze geschrieben` : "schon gleich, nichts zu schreiben";
+    copyOpen = false;
+    copyTo = [];
+  }
 
   function send(c: number, n: number, bq: Biquad) {
     write(`biquad.${c}.${n}.calc`, [bq.type, bq.f, bq.gain, bq.q, bq.b, bq.flags]);
@@ -261,7 +284,25 @@
       <label class="check" title="Jede Änderung auch auf {chName(partner(ch))} anwenden">
         <input type="checkbox" bind:checked={linked} /> mit {chName(partner(ch))} koppeln</label>
     {/if}
+    {#if channels.length > 1}
+      <button class="ghost copybtn" aria-expanded={copyOpen} onclick={() => { copyOpen = !copyOpen; copyNote = ""; }}
+        title="Alle Filter und EQ-Bänder dieses Kanals auf andere Kanäle übertragen">Kopieren …</button>
+    {/if}
   </div>
+  {#if copyOpen}
+    <div class="copy" role="group" aria-label="Ziel der Kopie">
+      <span class="muted">{chName(ch)} kopieren nach:</span>
+      {#each channels.filter((c) => c !== ch) as c}
+        <label class="chip" class:on={copyTo.includes(c)} style="--c:{colorOf(c)}">
+          <input type="checkbox" checked={copyTo.includes(c)}
+            onchange={(e) => (copyTo = (e.target as HTMLInputElement).checked ? [...copyTo, c] : copyTo.filter((x) => x !== c))} />
+          {c < 30 ? `${c} ` : ""}{chName(c)}</label>
+      {/each}
+      <button class="primary" disabled={!copyTo.length} onclick={copyNow}>Kopieren</button>
+      <button class="ghost" onclick={() => { copyOpen = false; copyTo = []; }}>Abbrechen</button>
+    </div>
+  {/if}
+  {#if copyNote}<p class="muted small copynote">{copyNote}</p>{/if}
   {#if channels.length > 1}
     <div class="overlay" role="group" aria-label="Weitere Kanäle über die Kurve legen">
       <span class="muted">Dazu legen:</span>
@@ -342,6 +383,11 @@
   .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; }
   .check input { accent-color: var(--accent); }
   .overlay { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-bottom: .4rem; font-size: .8rem; }
+  .copy { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .5rem 0; border-top: 1px solid var(--line); }
+  .copy .chip { border: 1px solid var(--line-strong); cursor: pointer; position: relative; background: var(--raised); }
+  .copy .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .copy .chip:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .copynote { margin: 0; }
   .chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem; font-size: .78rem; color: var(--muted); border-radius: 99px; }
   .chip .swatch { width: .6rem; height: .6rem; border-radius: 50%; border: 1.5px solid var(--c); }
   .chip.on { color: var(--fg); border-color: var(--c); }

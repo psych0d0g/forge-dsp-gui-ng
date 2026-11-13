@@ -7,3 +7,4 @@ export * from "./modc";
 export * from "./pools";
 export * from "./sdfiles";
 export * from "./forgelog";
+export * from "./bqcopy";
