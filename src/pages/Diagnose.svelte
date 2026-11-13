@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { app, query, writeOnce } from "../lib/app.svelte";
-  import { chipAt, ct7302Locked, errorName, es9018Locked, hardwareCheck, hex2, isEeprom, isPort, parseDspBoot, parseRegister,
-    parseScan } from "../lib/device";
+  import { app, query, withSd, writeOnce } from "../lib/app.svelte";
+  import { chipAt, ct7302Locked, decodeLog, errorName, es9018Locked, hardwareCheck, hex2, isEeprom, isPort, LOG_FILE, LOG_FILE_BIT,
+    LOG_LEVELS, LOG_OLD, logModule, logText, parseDspBoot, parseRegister, parseScan, sdDelete, sdDownload, sdList,
+    type LogRecord } from "../lib/device";
   import Icon from "../components/Icon.svelte";
 
   const d = $derived(app.device);
@@ -21,6 +22,7 @@
   async function refresh() {
     if (busy) return;
     busy = true;
+    if (port) await readLogSettings();
     await query("system.feature.attributes.hw");
     await query("system.errors");
     await query("system.temperature.celsius");
@@ -37,6 +39,76 @@
   $effect(() => {
     if (app.status === "online" && !checked) refresh();
   });
+
+  // --- binary log on the microSD (forge-dsp-firmware#60): switched by system.debug.out bit 2 and
+  // the level system.debug.mode, both stored in the Forge ------------------------------------------
+  let dbgOut = $state<number | null>(null);
+  let dbgMode = $state<number | null>(null);
+  let logBusy = $state("");
+  let logError = $state("");
+  let logRecs = $state<LogRecord[] | null>(null);
+  let logSize = $state(0);
+  let logShow = $state(60);
+  const num = (r: Awaited<ReturnType<typeof query>>) => {
+    const v = r.find((a) => a.kind === "get")?.value;
+    return v === undefined ? null : Number(v);
+  };
+  async function readLogSettings() {
+    dbgOut = num(await query("system.debug.out"));
+    dbgMode = num(await query("system.debug.mode"));
+  }
+  const logOn = $derived(dbgOut !== null && (dbgOut & LOG_FILE_BIT) !== 0 && (dbgMode ?? 0) > 0);
+  async function setLog(on: boolean, level = dbgMode || 4) {
+    if (dbgOut === null) return;
+    logError = (await writeOnce("system.debug.out", on ? dbgOut | LOG_FILE_BIT : dbgOut & ~LOG_FILE_BIT))
+      || (on ? await writeOnce("system.debug.mode", level) : "");
+    await readLogSettings();
+  }
+  async function logRun(what: string, fn: () => Promise<void>) {
+    if (logBusy) return;
+    logBusy = what;
+    logError = "";
+    try { await fn(); } catch (e) { logError = e instanceof Error ? e.message : String(e); } finally { logBusy = ""; }
+  }
+  /** FORGE.OLD first, then FORGE.LOG: oldest to newest */
+  async function fetchLog(): Promise<Uint8Array> {
+    return withSd(async (l) => {
+      const files = await sdList(l);
+      const parts: Uint8Array[] = [];
+      for (const n of [LOG_OLD, LOG_FILE]) {
+        const f = files.find((x) => x.name === n);
+        if (f) parts.push(await sdDownload(l, n, f.size, (k) => (logBusy = `Lese ${n} … ${k} von ${f.size} Byte`)));
+      }
+      const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+      let o = 0;
+      for (const p of parts) { all.set(p, o); o += p.length; }
+      return all;
+    });
+  }
+  const readLog = () => logRun("Lese das Log …", async () => {
+    const b = await fetchLog();
+    logSize = b.length;
+    logRecs = decodeLog(b).reverse();
+  });
+  const saveLog = () => logRun("Lese das Log …", async () => {
+    const b = await fetchLog();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([b.slice().buffer], { type: "application/octet-stream" }));
+    a.download = `forge-log-${new Date().toISOString().slice(0, 10)}.bin`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  const clearLog = () => {
+    if (!confirm("Das Log auf der Karte löschen (FORGE.LOG und FORGE.OLD)?")) return;
+    logRun("Lösche das Log …", () => withSd(async (l) => {
+      const files = (await sdList(l)).map((f) => f.name);
+      for (const n of [LOG_FILE, LOG_OLD]) if (files.includes(n)) await sdDelete(l, n);
+      logRecs = [];
+      logSize = 0;
+    }));
+  };
+  const ms = (v: number) => (v < 60000 ? `${(v / 1000).toFixed(1)} s` : `${Math.floor(v / 60000)} min ${Math.round((v % 60000) / 1000)} s`);
+  const LEVEL_CLASS = ["", "bad", "bad", "warnl", "", "muted", "muted", "muted"];
 
   // port extension: set system.errors=0 empties the counters (the original only by a factory reset)
   let clearError = $state("");
@@ -189,6 +261,48 @@
     <label class="check"><input type="checkbox" bind:checked={expert} /> Schreiben erlauben (Expertenmodus)</label>
     {#if isEeprom(h(rAddr))}<p class="muted small">Die Speicherbausteine (0xA0–0xAF) gibt die Firmware nicht frei.</p>{/if}
   </section>
+
+  <section class="panel tile log">
+    <div class="tilehead">
+      <h3>Log auf der Speicherkarte</h3>
+      <div class="acts">
+        <button onclick={readLog} disabled={!!logBusy}>Lesen</button>
+        <button onclick={saveLog} disabled={!!logBusy}>Herunterladen</button>
+        <button class="ghost danger" onclick={clearLog} disabled={!!logBusy}>Löschen</button>
+      </div>
+    </div>
+    <div class="logset">
+      <label class="check"><input type="checkbox" checked={logOn} disabled={dbgOut === null || !!logBusy}
+        onchange={(e) => setLog((e.target as HTMLInputElement).checked)} /> Ereignisse auf die Karte schreiben</label>
+      <label class="check">Stufe
+        <select value={dbgMode || 4} disabled={!logOn || !!logBusy}
+          onchange={(e) => setLog(true, Number((e.target as HTMLSelectElement).value))}>
+          {#each LOG_LEVELS as t, i}{#if i > 0 && i < 7}<option value={i}>{i} {t}</option>{/if}{/each}
+        </select>
+      </label>
+      <span class="muted small">Im Forge gespeichert (<code>system.debug.out</code> Bit 2, <code>system.debug.mode</code>), wirkt sofort.</span>
+    </div>
+    {#if logBusy}<p class="busytext small">{logBusy}</p>{/if}
+    {#if logError}<p class="err small">{logError}</p>{/if}
+    {#if logRecs}
+      {#if logRecs.length}
+        <p class="muted small">{logRecs.length} Einträge ({logSize} Byte), neueste zuerst.</p>
+        <table class="logt">
+          <thead><tr><th>Start</th><th>Zeit</th><th>Stufe</th><th>Bereich</th><th>Ereignis</th></tr></thead>
+          <tbody>
+            {#each logRecs.slice(0, logShow) as r, i (i)}
+              <tr class:first={r.module === 1 && r.event === 1}>
+                <td class="num">{r.boot}</td><td class="num">{ms(r.ms)}</td>
+                <td class={LEVEL_CLASS[r.level] ?? ""}>{LOG_LEVELS[r.level] ?? r.level}</td>
+                <td>{logModule(r.module)}</td><td>{logText(r)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        {#if logRecs.length > logShow}<button class="ghost" onclick={() => (logShow += 200)}>Ältere zeigen</button>{/if}
+      {:else}<p class="muted">Kein Log auf der Karte.</p>{/if}
+    {/if}
+  </section>
 {/if}
 
 <style>
@@ -200,6 +314,18 @@
   .tilehead { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .tilehead h3 { margin: 0; }
   .err { color: var(--err); margin: 0; }
+  .log { margin-top: .75rem; }
+  .logset { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  .logset select { font: inherit; padding: .2rem .35rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
+  .logt { font-size: .82rem; }
+  .logt th { text-align: left; color: var(--muted); font-weight: 600; font-size: .74rem; padding: .25rem .4rem; border-bottom: 1px solid var(--line); }
+  .logt td { padding: .22rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .logt tr.first td { border-top: 2px solid var(--line-strong); }
+  .logt .bad { color: var(--err); }
+  .logt .warnl { color: var(--warn); }
+  .busytext { color: var(--accent); margin: 0; }
+  .danger { color: var(--err); }
+  code { font-family: var(--mono); font-size: .9em; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1.25rem; margin: 0; }
   dt { color: var(--muted); }
   dd { margin: 0; }

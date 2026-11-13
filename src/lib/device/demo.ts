@@ -60,9 +60,23 @@ export function demoState(): DeviceState {
 }
 
 /** Accepts every write, knows no reads: the demo state is already complete. */
+/** a few records as the DEV unit wrote them (forge-dsp-firmware#60, docs/log-format.md) */
+function demoLog(): Uint8Array {
+  const recs = [[57, 24833, 1, 6, 1, 1, 12], [58, 0, 1, 1, 1, 8, 0], [58, 8472, 5, 3, 2, 1, 256], [58, 10666, 5, 3, 2, 2, 256],
+    [58, 10668, 5, 3, 2, 3, 256], [58, 24829, 4, 4, 1, 0, 0], [59, 0, 1, 1, 1, 1, 0], [59, 9210, 2, 2, 5, 4, 0],
+    [59, 9211, 2, 1, 2, 0x2f, 0], [60, 0, 1, 1, 1, 32, 0], [60, 24901, 4, 4, 1, 1, 0]];
+  const b = new Uint8Array(recs.length * 12), v = new DataView(b.buffer);
+  recs.forEach(([boot, ms, lvl, mod, ev, p1, p2], i) => {
+    v.setUint16(i * 12, boot, true); v.setUint32(i * 12 + 2, ms, true); b[i * 12 + 6] = lvl << 5 | mod; b[i * 12 + 7] = ev;
+    v.setUint16(i * 12 + 8, p1, true); v.setUint16(i * 12 + 10, p2, true);
+  });
+  return b;
+}
+
 /** the microSD of the demo (forge-dsp-firmware#59): same commands and answers as the firmware */
 export class DemoCard {
-  files = new Map<string, Uint8Array>([["PRESET_1.CFG", new TextEncoder().encode('[96ELN]\nFILE_v10 = "gain.out.1=199"\n')]]);
+  files = new Map<string, Uint8Array>([["PRESET_1.CFG", new TextEncoder().encode('[96ELN]\nFILE_v10 = "gain.out.1=199"\n')],
+    ["FORGE.LOG", demoLog()]]);
   private open: { name: string; mode: 1 | 2; block: number; data: number[] } | null = null;
   line(kind: string, reg: string, line: string): string {
     const val = /=(.*?)(;[0-9A-F]{2})?$/.exec(line)?.[1] ?? "";
@@ -107,6 +121,8 @@ export class DemoTransport implements Transport {
   name = "Demo";
   sd = new DemoCard();
   errors = "[[129,1],[3,2]]";
+  dbgOut = 4;
+  dbgMode = 4;
   /** a simulated bootloader target, so the firmware page can be tried without a device */
   bytes = new SimTarget();
   private fn: (l: string) => void = () => {};
@@ -117,6 +133,10 @@ export class DemoTransport implements Transport {
     if (!m) return;
     let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
     if (m[1] === "set" && m[3] === "system.errors") this.errors = "[]";
+    if (m[1] === "set" && m[3] === "system.debug.out") this.dbgOut = Number(/=(\d+)/.exec(line)?.[1] ?? 0);
+    if (m[1] === "set" && m[3] === "system.debug.mode") this.dbgMode = Number(/=(\d+)/.exec(line)?.[1] ?? 0);
+    if (m[1] === "get" && m[3] === "system.debug.out") out = ` <.1 system.debug.out=${this.dbgOut}`;
+    if (m[1] === "get" && m[3] === "system.debug.mode") out = ` <.1 system.debug.mode=${this.dbgMode}`;
     if (m[3].startsWith("system.sd")) {
       setTimeout(() => this.fn(this.sd.line(m[1], m[3], line)), 15);
       return;
