@@ -392,3 +392,24 @@ describe("copy a channel (#5)", () => {
     expect(planCopy({ 1: { type: 0, f: 5, gain: 1, q: 1, b: 1, flags: 0 } }, { 1: { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 } }).writes).toEqual([]);
   });
 });
+
+import { sumResponse, coeffs as bqCoeffs } from "../src/lib/dsp/biquad";
+describe("crossover sum (#5)", () => {
+  const f = [100, 1000, 10000];
+  it("two equal channels: +6 dB; one inverted: cancelled", () => {
+    const flat = { list: [], gain: 1, invert: false, delay: 0 };
+    expect(sumResponse([flat, flat], f, 96000).db.map((v) => Math.round(v * 10) / 10)).toEqual([6, 6, 6]);
+    expect(Math.max(...sumResponse([flat, { ...flat, invert: true }], f, 96000).db)).toBeLessThan(-200);
+  });
+  it("a Linkwitz-Riley 4 pair sums flat", () => {
+    const lr = (type: number) => bqCoeffs({ type, f: 2000, gain: 0, q: 707, b: 0, flags: 0x80 }, 96000);
+    // LR4 = two Butterworth 12 dB sections: type 3 low pass, type 9 high pass (biquad.ts TYPES)
+    const lp = { list: [lr(3), lr(3)], gain: 1, invert: false, delay: 0 };
+    const hp = { list: [lr(9), lr(9)], gain: 1, invert: false, delay: 0 };
+    for (const v of sumResponse([lp, hp], [200, 1000, 2000, 4000, 20000], 96000).db) expect(Math.abs(v)).toBeLessThan(0.1);
+  });
+  it("a delay of half a period at 1 kHz cancels two equal channels there", () => {
+    const a = { list: [], gain: 1, invert: false, delay: 0 }, b = { ...a, delay: 48 };   // 0.5 ms at 96 kHz
+    expect(sumResponse([a, b], [1000], 96000).db[0]).toBeLessThan(-60);
+  });
+});

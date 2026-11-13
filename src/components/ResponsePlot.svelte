@@ -2,14 +2,16 @@
   // Frequency response of one channel: sum curve, the selected filter alone, optional phase.
   // Handles sit at frequency/gain of each filter and can be dragged; the wheel changes the Q.
   import type { Biquad } from "../lib/device";
-  import { chainResponse, coeffs, isActive, logFreqs, typeInfo } from "../lib/dsp/biquad";
+  import { chainResponse, coeffs, isActive, logFreqs, sumResponse, typeInfo, type SumPart } from "../lib/dsp/biquad";
 
-  let { filters, rate, freq, view, overlays = [], gainRange, selected, showPhase, onselect, onmove, onq }: {
+  let { filters, rate, freq, view, overlays = [], sum = null, gainRange, selected, showPhase, onselect, onmove, onq }: {
     filters: { n: number; bq: Biquad; label?: string | number }[]; rate: number; freq: [number, number];
     /** range of the frequency axis (a section of `freq`); the handles still move within `freq` */
     view?: [number, number];
     /** other channels drawn behind this one, for comparison */
     overlays?: { name: string; color: string; filters: Biquad[] }[];
+    /** electrical sum of channels (crossover view), drawn dashed; built from these parts */
+    sum?: SumPart[] | null;
     gainRange: [number, number];
     selected: number | null; showPhase: boolean; onselect: (n: number) => void;
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
@@ -28,6 +30,7 @@
   const active = $derived(filters.filter((f) => isActive(f.bq)));
   const total = $derived(chainResponse(active.map((f) => coeffs(f.bq, rate)), freqs, rate));
   const others = $derived(overlays.map((o) => ({ ...o, curve: chainResponse(o.filters.filter(isActive).map((b) => coeffs(b, rate)), freqs, rate) })));
+  const sumCurve = $derived(sum && sum.length > 1 ? sumResponse(sum, freqs, rate) : null);
   const sel = $derived(active.find((f) => f.n === selected));
   const single = $derived(sel ? chainResponse([coeffs(sel.bq, rate)], freqs, rate) : null);
   const line = (v: number[], fy: (v: number) => number) => v.map((d, i) => `${i ? "L" : "M"}${x(freqs[i]).toFixed(1)} ${fy(d).toFixed(1)}`).join("");
@@ -92,6 +95,7 @@
   {/each}
   {#if area}<path class="single" d={area} />{/if}
   <path class="total" d={line(total.db, y)} />
+  {#if sumCurve}<path class="sum" d={line(sumCurve.db, y)}><title>Summe (elektrisch, mit Pegel, Polarität und Laufzeit)</title></path>{/if}
   {#each active.filter((f) => f.bq.f >= lo && f.bq.f <= hi) as f}
     <g class="handle" class:sel={f.n === selected} transform="translate({x(f.bq.f)} {y(handleDb(f.bq))})">
       <circle r="11" role="slider" tabindex="0" aria-label="Filter {f.label ?? f.n}: {f.bq.f} Hz" aria-valuenow={f.bq.f}
@@ -111,6 +115,7 @@
   .axis.ph { fill: var(--muted); }
   .total { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; }
   .single { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: color-mix(in srgb, var(--accent) 55%, transparent); stroke-width: 1; }
+  .sum { fill: none; stroke: var(--fg); stroke-width: 2; stroke-dasharray: 7 4; opacity: .85; }
   .other { fill: none; stroke-width: 1.8; stroke-linejoin: round; opacity: .9; }
   .other.ph { stroke-width: 1.1; stroke-dasharray: 5 4; opacity: .7; }
   .phase { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 5 4; }

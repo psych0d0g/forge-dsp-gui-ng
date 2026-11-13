@@ -2,8 +2,8 @@
   import { tick, untrack } from "svelte";
   import { app, outName, setPoolLengths, write } from "../lib/app.svelte";
   import { channelColor } from "../lib/channelColors";
-  import { isPort, limitsOf, planCopy, poolOf, proposeGrow, sumsActiveAnywhere, type Biquad } from "../lib/device";
-  import { isActive, typeInfo, TYPES, viewRange } from "../lib/dsp/biquad";
+  import { isPort, limitsOf, planCopy, poolOf, proposeGrow, rawToDb, sumsActiveAnywhere, type Biquad } from "../lib/device";
+  import { coeffs, isActive, typeInfo, TYPES, viewRange, type SumPart } from "../lib/dsp/biquad";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
@@ -31,6 +31,20 @@
   // ?over=3,5 starts with these channels overlaid
   let over = $state<number[]>((new URLSearchParams(location.search).get("over") ?? "").split(",").map(Number).filter((n) => n > 0));
   const overlays = $derived(over.filter((c) => c !== ch && d.biquads[c]).map((c) => ({ name: chName(c), color: colorOf(c), filters: Object.values(d.biquads[c]) })));
+  // crossover view (#5): electrical sum of this channel and the overlaid outputs, with output gain,
+  // polarity and delay; muted outputs and the signal sums (35/36) do not take part
+  let showSum = $state(true);
+  const sumParts = $derived.by((): SumPart[] | null => {
+    if (!showSum || ch > 30 || !d.biquads[ch]) return null;  // ch is 0 until the first channel is chosen
+    const outs = [ch, ...over.filter((c) => c !== ch && c < 30 && d.biquads[c])];
+    if (outs.length < 2) return null;
+    return outs.filter((c) => !d.mute[c - 1]).map((c) => ({
+      list: Object.values(d.biquads[c]).filter(isActive).map((b) => coeffs(b, rate)),
+      gain: d.scales.out ? 10 ** (rawToDb(d.scales.out, d.gain.out[c - 1] ?? d.scales.out.zero) / 20) : 1,
+      invert: !!d.phase[c - 1],
+      delay: d.delay.out[c - 1] ?? 0,
+    }));
+  });
   const toggleOver = (c: number) => { over = over.includes(c) ? over.filter((x) => x !== c) : [...over, c]; view = section(); };
   const partner = (c: number) => (c > 30 ? (c === 35 ? 36 : 35) : c % 2 ? c + 1 : c - 1);
 
@@ -311,9 +325,13 @@
           <span class="swatch"></span>{c < 30 ? `${c} ` : ""}{chName(c)}</button>
       {/each}
       {#if over.length}<button class="ghost clear" onclick={() => { over = []; view = section(); }}>keine</button>{/if}
+      {#if ch < 30 && over.some((c) => c < 30 && c !== ch)}
+        <label class="check sumtoggle" title="Elektrische Summe dieses Kanals und der dazugelegten Ausgänge, mit Ausgangspegel, Polarität und Laufzeit (ohne Raum und Lautsprecher). Stumme Ausgänge zählen nicht.">
+          <input type="checkbox" bind:checked={showSum} /> Summe</label>
+      {/if}
     </div>
   {/if}
-  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} view={zoom ? view : undefined} {overlays} gainRange={lim.bqGain} {selected} {showPhase}
+  <ResponsePlot filters={used.map((s) => ({ ...s, label: tag(s.n) }))} {rate} freq={lim.freq} view={zoom ? view : undefined} {overlays} sum={sumParts} gainRange={lim.bqGain} {selected} {showPhase}
     onselect={(n) => (selected = n)}
     onmove={(n, f, g) => update(n, g === null ? { f } : { f, gain: g })}
     onq={(n, k) => update(n, { q: clamp(Math.round(d.biquads[ch][n].q * k), lim.bqQ) })} />

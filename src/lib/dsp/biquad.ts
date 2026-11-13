@@ -142,6 +142,33 @@ export function chainResponse(list: Coeffs[], freqs: number[], rate: number): Cu
   return { db, phase };
 }
 
+/** one output channel for the sum: its biquads, linear gain, polarity and delay in samples */
+export interface SumPart { list: Coeffs[]; gain: number; invert: boolean; delay: number }
+
+/**
+ * Complex sum of several channels (crossover view, #5): every channel's chain times its gain,
+ * polarity and delay, added up. Without room and drivers: the electrical sum at the outputs.
+ */
+export function sumResponse(parts: SumPart[], freqs: number[], rate: number): Curve {
+  const db: number[] = [], phase: number[] = [];
+  for (const f of freqs) {
+    let sr = 0, si = 0;
+    for (const p of parts) {
+      let re = p.invert ? -p.gain : p.gain, im = 0;
+      for (const c of p.list) {
+        const [r, i] = response(c, f, rate);
+        [re, im] = [re * r - im * i, re * i + im * r];
+      }
+      const w = (-2 * Math.PI * f * p.delay) / rate, cr = Math.cos(w), ci = Math.sin(w);
+      sr += re * cr - im * ci;
+      si += re * ci + im * cr;
+    }
+    db.push(10 * Math.log10(Math.max(sr * sr + si * si, 1e-30)));
+    phase.push((Math.atan2(si, sr) * 180) / Math.PI);
+  }
+  return { db, phase };
+}
+
 /**
  * Frequency range worth showing for a set of filters: from below the lowest to above the highest
  * filter frequency, with a margin of one octave and at least `marginHz`, inside `full`. Without

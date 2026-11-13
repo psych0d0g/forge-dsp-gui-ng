@@ -21,5 +21,5 @@ export default defineConfig({
   plugins: [svelte(), viteSingleFile()],
   define: { __APP_VERSION__: JSON.stringify(pkg.version), __APP_COMMIT__: JSON.stringify(commit) },
   build: { target: "es2022", outDir: "dist", emptyOutDir: true },
-  test: { include: ["tests/**/*.test.ts"] },
+  test: { include: ["tests/**/*.test.ts"], exclude: ["tests/render/**"] },  // render tests: vitest.render.config.ts
 });
