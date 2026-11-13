@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explain } from "../lib/errors";
   import { saveFile } from "../lib/saveFile";
   import { app, withSd } from "../lib/app.svelte";
   import { isPort, sdDelete, sdDownload, sdList, sdNameFor, sdState, sdUpload, validSdName, type SdFile, type SdState } from "../lib/device";
@@ -30,7 +31,7 @@
     try {
       await fn();
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = explain(e);
     } finally {
       busy = "";
     }

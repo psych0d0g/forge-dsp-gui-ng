@@ -2,6 +2,7 @@
 import { ForgeClient, type Answer, type Value } from "./protocol";
 import type { ByteLink, Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
+import { deviceError, explain } from "./errors";
 import { autoPort, openNativeSerial, portsNative, type PortInfo } from "./transport/native";
 import { isNative } from "./native";
 import { openWebSocket } from "./transport/websocket";
@@ -80,7 +81,7 @@ export async function connect(kind: "usb" | "esp" | "demo") {
     loadInNames();
     app.status = "online";
   } catch (e) {
-    app.error = e instanceof Error ? e.message : String(e);
+    app.error = explain(e);
     await disconnect();
   }
 }
@@ -144,9 +145,9 @@ export async function writeOnce(reg: string, value: Value): Promise<string> {
   try {
     const r = await client.set(reg, value, { checksum: true });
     const bad = r.find((a) => a.kind === "error");
-    return bad ? bad.message ?? "Fehler" : "";
+    return bad ? deviceError(bad) : "";
   } catch (e) {
-    return e instanceof Error ? e.message : String(e);
+    return explain(e);
   }
 }
 
@@ -246,7 +247,7 @@ export async function withSd<T>(fn: (l: SdLink) => Promise<T>): Promise<T> {
     async set(reg, value) {
       const r = await c.set(reg, value, { checksum: true });
       const bad = r.find((a) => a.kind === "error");
-      return bad ? bad.message ?? "Fehler" : r.some((a) => a.kind === "info") ? "" : "keine Antwort";
+      return bad ? deviceError(bad) : r.some((a) => a.kind === "info") ? "" : "keine Antwort";
     },
   };
   app.exclusive = true;
@@ -265,7 +266,7 @@ export async function sendRaw(line: string) {
   try {
     for (const a of await client.send(line)) applyAnswer(app.device, a);
   } catch (e) {
-    app.error = e instanceof Error ? e.message : String(e);
+    app.error = explain(e);
   }
 }
 
@@ -275,9 +276,9 @@ export async function writeRaw(reg: string, valueText: string): Promise<string> 
   try {
     const r = await client.setRaw(reg, valueText, { checksum: true });
     const bad = r.find((a) => a.kind === "error");
-    return bad ? bad.message ?? "Fehler" : "";
+    return bad ? deviceError(bad) : "";
   } catch (e) {
-    return e instanceof Error ? e.message : String(e);
+    return explain(e);
   }
 }
 
@@ -303,9 +304,9 @@ export function write(reg: string, value: Value) {
       try {
         const r = await c.set(reg, v, { checksum: true });
         const bad = r.find((a) => a.kind === "error");
-        if (bad) app.error = `${bad.register}: ${bad.message}`;
+        if (bad) app.error = deviceError(bad);
       } catch (e) {
-        app.error = e instanceof Error ? e.message : String(e);
+        app.error = explain(e);
       }
       v = p.next;
       p.next = undefined;

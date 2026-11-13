@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explain } from "../lib/errors";
   import { saveFile } from "../lib/saveFile";
   import { app, query, withSd, writeOnce } from "../lib/app.svelte";
   import { chipAt, ct7302Locked, decodeLog, exportState, errorName, es9018Locked, hardwareCheck, hex2, isEeprom, isPort, LOG_FILE, LOG_FILE_BIT,
@@ -69,7 +70,7 @@
     if (logBusy) return;
     logBusy = what;
     logError = "";
-    try { await fn(); } catch (e) { logError = e instanceof Error ? e.message : String(e); } finally { logBusy = ""; }
+    try { await fn(); } catch (e) { logError = explain(e); } finally { logBusy = ""; }
   }
   /** FORGE.OLD first, then FORGE.LOG: oldest to newest */
   async function fetchLog(): Promise<Uint8Array> {

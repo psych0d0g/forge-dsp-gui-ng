@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explain } from "../lib/errors";
   import { saveFile } from "../lib/saveFile";
   import { app, query, reload, updateAccess } from "../lib/app.svelte";
   import { isPort, parseScan } from "../lib/device";
@@ -132,7 +133,7 @@
       await reload();
     } catch (e) {
       const u = e instanceof UpdateError ? e : null;
-      result = { ok: false, text: u ? `${STEP_LABEL[u.step]}: ${u.message}` : String(e), touched: u?.flashTouched };
+      result = { ok: false, text: u ? `${STEP_LABEL[u.step]}: ${explain(u.message)}` : explain(e), touched: u?.flashTouched };
     } finally {
       running = false; app.exclusive = false;
     }
