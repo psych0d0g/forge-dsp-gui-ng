@@ -321,6 +321,14 @@ export const inputsLeftFirst = (count: number) =>
  * numbering (forge-dsp-firmware#52). */
 export const INPUT_PAIRS: { in: [number, number] }[] = [{ in: [2, 1] }, { in: [4, 3] }, { in: [6, 5] }, { in: [8, 7] }];
 
+/** power sum of outputs (system.vu.out values) as one value of the same scale; sides[i] = side of
+ * output i+1 (0 left, 1 right, -1 not counted), default left = 1,3,5,7, right = 2,4,6,8 */
+export function vuSum(values: number[], side: 0 | 1, sides: number[] = [0, 1, 0, 1, 0, 1, 0, 1]): number {
+  let p = 0;
+  for (let i = 0; i < values.length; i++) if (sides[i] === side && values[i] > 0) p += 10 ** (vuToDb(values[i]) / 10);
+  return p > 0 ? Math.min(255, Math.round(255 + 20 * Math.log10(p))) : 0;
+}
+
 /** level in dBFS from the gain-scale value of system.vu; 0 = no signal */
 export const vuToDb = (v: number) => (v > 0 ? (v - 255) / 2 : -Infinity);
 

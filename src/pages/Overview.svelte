@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, inName, meter, outName, setVuFloor, VU_FLOORS, type PageId } from "../lib/app.svelte";
+  import { app, inName, meter, outName, type PageId } from "../lib/app.svelte";
   import { INPUT_PAIRS, rawToDb } from "../lib/device";
   import Icon from "../components/Icon.svelte";
   import LevelBar from "../components/LevelBar.svelte";
@@ -36,12 +36,8 @@
     <p class="muted">Der Signalweg von links nach rechts. Ein Klick auf eine Stufe öffnet sie.</p>
   </div>
   {#if d.vu}
-    <label class="floor muted">Pegelanzeige ab
-      <select value={meter.floor} onchange={(e) => setVuFloor(Number((e.target as HTMLSelectElement).value))}
-        title="Ab welchem Pegel die Balken anfangen. Tiefer zeigt auch leise Signale und Rauschen, etwa zum Einstellen der Gain-Regler an den Analogeingängen.">
-        {#each VU_FLOORS as f}<option value={f}>{f} dBFS</option>{/each}
-      </select>
-    </label>
+    <button class="ghost floor" onclick={() => go("settings")} title="Ab welchem Pegel die Balken anfangen, und was die Kopfzeile zeigt">
+      Pegelanzeige ab {meter.floor} dBFS</button>
   {/if}
 </header>
 
@@ -104,7 +100,6 @@
 <style>
   .head { margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
   .floor { display: inline-flex; align-items: center; gap: .5rem; font-size: .82rem; }
-  .floor select { font: inherit; padding: .25rem .4rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
   .levels :global(.wrap) { min-width: 0; }
   /* the inputs are wider: their level bars are used to set the analog gain pots */
   .flow { display: grid; grid-template-columns: minmax(13rem, 1.6fr) 1.5rem repeat(3, minmax(7.5rem, .8fr) 1.5rem) minmax(17rem, 2.4fr); align-items: stretch; }

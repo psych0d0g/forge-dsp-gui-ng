@@ -8,7 +8,7 @@ import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_R
 import { DemoTransport, demoState } from "./device/demo";
 
 export type PageId = "overview" | "mixer" | "filters" | "delay" | "modc" | "presets" | "biquads"
-  | "diagnose" | "firmware" | "console" | "sdcard";
+  | "diagnose" | "firmware" | "console" | "sdcard" | "settings";
 
 export const app = $state({
   page: "overview" as PageId,
@@ -164,11 +164,30 @@ function loadFloor(): number {
     return (VU_FLOORS as readonly number[]).includes(v) ? v : -60;
   } catch { return -60; }
 }
-export const meter = $state({ floor: typeof window === "undefined" ? -60 : loadFloor() });
+/** header meter: "outputs" = sum of the outputs given per output (side 0 = left, 1 = right, -1 = not
+ * counted), "inputs" = the loudest input pair */
+export type MeterSource = "outputs" | "inputs";
+const DEFAULT_SIDES = [0, 1, 0, 1, 0, 1, 0, 1];
+function loadMeter(): { source: MeterSource; sides: number[] } {
+  try {
+    const m = JSON.parse(localStorage.getItem("meter") ?? "{}");
+    const sides = Array.isArray(m.sides) && m.sides.length === 8 && m.sides.every((x: unknown) => x === 0 || x === 1 || x === -1)
+      ? m.sides : DEFAULT_SIDES;
+    return { source: m.source === "inputs" ? "inputs" : "outputs", sides };
+  } catch { return { source: "outputs", sides: DEFAULT_SIDES }; }
+}
+const loaded = typeof window === "undefined" ? { source: "outputs" as MeterSource, sides: DEFAULT_SIDES } : loadMeter();
+export const meter = $state({ floor: typeof window === "undefined" ? -60 : loadFloor(), source: loaded.source, sides: [...loaded.sides] });
 export function setVuFloor(v: number) {
   meter.floor = v;
   try { localStorage.setItem("vuFloor", String(v)); } catch { /* private mode: only this session */ }
 }
+export function setMeter(source: MeterSource, sides: number[]) {
+  meter.source = source;
+  meter.sides = [...sides];
+  try { localStorage.setItem("meter", JSON.stringify({ source, sides })); } catch { /* see above */ }
+}
+export const resetMeter = () => setMeter("outputs", DEFAULT_SIDES);
 
 // --- files on the microSD (forge-dsp-firmware#59) --------------------------------------------------
 let sdBusy = false;
@@ -268,8 +287,8 @@ async function poll() {
   tick++;
   const regs: string[] = [];
   if (app.device.vu !== null) regs.push("system.vu");
-  // output levels only while the overview shows them (each read is two more DSP accesses)
-  if (app.device.vuOut !== null && app.page === "overview") regs.push("system.vu.out");
+  // output levels: the meter in the header shows their sum
+  if (app.device.vuOut !== null) regs.push("system.vu.out");
   if (tick % STATUS_EVERY === 0)
     for (const r of STATUS_REGS) if (!r.port || isPort(app.device)) regs.push(r.reg);
   if (!regs.length) return;

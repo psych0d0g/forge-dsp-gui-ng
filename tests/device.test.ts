@@ -3,6 +3,7 @@ import v30 from "./fixtures/V30-96LN.json";
 import { describe, expect, it } from "vitest";
 import { ForgeClient, parseAnswer, parseValue } from "../src/lib/protocol";
 import type { Transport } from "../src/lib/transport/types";
+import { vuSum } from "../src/lib/device";
 import { alignFromDistances, applyAnswer, inputDelayGroup, limitsOf, bytesHex, cmToSamples, dbToRaw, delayGroups, delayMax, emptyState, exportState,
   hexBytes, isPort, modcTypeVersion, parseKeyInfo, rawToDb, readDevice, samplesToCm, samplesToMs } from "../src/lib/device";
 
@@ -121,6 +122,17 @@ describe("applyAnswer", () => {
     expect(s.vu).toEqual([0, 0, 0, 0, 0, 0, 162, 202]);
     expect(s.vuOut).toEqual([190, 150, 191, 151, 190, 150, 191, 152]);
     expect(ap(" <.1 system.vu.x=[1]")).toBe(false);
+  });
+  it("sums the outputs per side for the header meter", () => {
+    // two equal left outputs: +3 dB (6 steps), right only output 2
+    expect(vuSum([200, 150, 200, 0, 0, 0, 0, 0], 0)).toBe(206);
+    expect(vuSum([200, 150, 200, 0, 0, 0, 0, 0], 1)).toBe(150);
+    expect(vuSum([0, 0, 0, 0], 0)).toBe(0);
+    expect(vuSum([255, 0, 255, 0], 0)).toBe(255);                      // capped at 0 dBFS
+    // own assignment: left only output 5, right outputs 1 and 2, the rest not counted
+    const sides = [1, 1, -1, -1, 0, -1, -1, -1];
+    expect(vuSum([200, 200, 255, 255, 180, 255, 255, 255], 0, sides)).toBe(180);
+    expect(vuSum([200, 200, 255, 255, 180, 255, 255, 255], 1, sides)).toBe(206);
   });
   it("takes single values and events into the state", () => {
     const s = emptyState();

@@ -1,38 +1,46 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { app, inName, meter } from "../lib/app.svelte";
-  import { INPUT_PAIRS, vuToDb } from "../lib/device";
+  import { INPUT_PAIRS, vuSum, vuToDb } from "../lib/device";
 
-  // Level of the input pair that carries the signal. The firmware delivers RMS values a few
-  // times per second; the bars rise at once and fall slowly, as a level meter does.
-  const FLOOR = $derived(meter.floor);  // setting "Anzeige ab" (overview)
+  // The header shows the sum of all outputs (system.vu.out, forge-dsp-firmware#52): left = power sum
+  // of outputs 1,3,5,7, right = 2,4,6,8. Firmware without output levels: the loudest input pair.
+  // The firmware delivers RMS values a few times per second; the bars rise at once and fall slowly.
+  const FLOOR = $derived(meter.floor);  // setting "Pegelanzeige ab" (overview)
   const FALL_DB = 3;  // per update
   let shown = $state<[number, number]>([-200, -200]);
   let label = $state("");
+  const outputs = $derived(app.device.vuOut !== null && meter.source === "outputs");
+  const sideList = (side: number) => meter.sides.map((x, i) => (x === side ? i + 1 : 0)).filter(Boolean).join("/") || "keine";
 
   $effect(() => {
-    const vu = app.device.vu;
-    if (!vu) return;
-    let best = INPUT_PAIRS[INPUT_PAIRS.length - 1];
-    let bestDb = -Infinity;
-    for (const p of INPUT_PAIRS) {
-      const d = Math.max(vuToDb(vu[p.in[0] - 1] ?? 0), vuToDb(vu[p.in[1] - 1] ?? 0));
-      if (d > bestDb) { bestDb = d; best = p; }
-    }
-    // "Eingang 2" / "Digital" for default names, otherwise the user's names
-    const [l, r] = best.in.map(inName);
-    const common = l.replace(/ L$/, "");
-    label = bestDb <= FLOOR ? "kein Signal" : common !== l && r === `${common} R` ? common : `${l} / ${r}`;
-    const now = best.in.map((i) => Math.max(-200, vuToDb(vu[i - 1] ?? 0))) as [number, number];
+    const out = app.device.vuOut, vu = app.device.vu;
+    let now: [number, number];
+    if (out && meter.source === "outputs") {
+      now = [vuToDb(vuSum(out, 0, meter.sides)), vuToDb(vuSum(out, 1, meter.sides))];
+      label = "Ausgänge";
+    } else if (vu) {
+      let best = INPUT_PAIRS[INPUT_PAIRS.length - 1];
+      let bestDb = -Infinity;
+      for (const p of INPUT_PAIRS) {
+        const d = Math.max(vuToDb(vu[p.in[0] - 1] ?? 0), vuToDb(vu[p.in[1] - 1] ?? 0));
+        if (d > bestDb) { bestDb = d; best = p; }
+      }
+      // "Eingang 2" / "Digital" for default names, otherwise the user's names
+      const [l, r] = best.in.map(inName);
+      const common = l.replace(/ L$/, "");
+      label = bestDb <= FLOOR ? "kein Signal" : common !== l && r === `${common} R` ? common : `${l} / ${r}`;
+      now = best.in.map((i) => vuToDb(vu[i - 1] ?? 0)) as [number, number];
+    } else return;
     const prev = untrack(() => shown);  // not a dependency: only a new reading moves the bars
-    shown = [Math.max(now[0], prev[0] - FALL_DB), Math.max(now[1], prev[1] - FALL_DB)];
+    shown = [Math.max(now[0], prev[0] - FALL_DB, -200), Math.max(now[1], prev[1] - FALL_DB, -200)];
   });
   const pct = (db: number) => `${Math.max(0, Math.min(100, ((db - FLOOR) / -FLOOR) * 100))}%`;
   const text = $derived(Math.max(...shown) <= FLOOR ? "−∞" : `−${Math.abs(Math.max(...shown)).toFixed(0)}`);
 </script>
 
-{#if app.device.vu}
-  <div class="vu" title="Eingangspegel (Effektivwert, dBFS): {label}" role="img"
+{#if app.device.vu || app.device.vuOut}
+  <div class="vu" title="{outputs ? `Summe der Ausgänge, links ${sideList(0)}, rechts ${sideList(1)}` : 'Eingangspegel'} (Effektivwert, dBFS): {label}. Einstellbar unter Werkzeuge › Einstellungen" role="img"
     aria-label="Eingangspegel {label} {text} dBFS">
     <div class="bars">
       {#each shown as db, i}
