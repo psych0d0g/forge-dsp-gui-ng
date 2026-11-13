@@ -1,6 +1,6 @@
 {
   "name": "forge-dsp-gui-ng",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Web-Bedienoberfläche für Forge DSP / ETON CORE D8 (USB per Web Serial oder ESP32 per WebSocket)",

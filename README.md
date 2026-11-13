@@ -10,7 +10,7 @@ Neue Bedienoberfläche für **Forge DSP** und **ETON CORE D8** als Nachfolger de
 
 Die Firmware des Forge (Original BASCOM 1.11.6000 oder der C-Port [forge-dsp-firmware](https://github.com/psych0d0g/forge-dsp-firmware)) bleibt unverändert, die App nutzt das Textprotokoll.
 
-**Stand:** Release 1.0.0. Seiten: Übersicht mit Pegeln aller Ein- und Ausgänge, Mixer als Mischpult (Kanalzüge, Routing,
+**Stand:** Release 1.1.0. Seiten: Übersicht mit Pegeln aller Ein- und Ausgänge, Mixer als Mischpult (Kanalzüge, Routing,
 Ausgangsbank, Profile, „All Over“), Filter & EQ (Frequenz- und Phasengang, Weichenansicht mit elektrischer Summe,
 Kanal kopieren), Laufzeit, Steuerblöcke, Presets mit Abstimmungsdateien im `.cfg`-Format der Original-GUI,
 Biquad-Verteilung, Diagnose mit Log der Speicherkarte, Speicherkarte, Firmware-Update im Browser (auch direkt aus den
