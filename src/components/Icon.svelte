@@ -10,6 +10,7 @@
     modc: "M4 6h6v5H4zM14 13h6v5h-6zM10 8.5h4v7M14 15.5h0",
     presets: "M5 4h14v16l-7-4-7 4z",
     biquads: "M3 7h18v4H3zM3 15h18v4H3zM10 7v4M15 15v4",
+    sdcard: "M8 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7zM9 7v3M12 7v3M15 7v3",
     diagnose: "M3 12h4l2-6 4 12 2-6h6",
     firmware: "M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4",
     console: "M4 5h16v14H4zM7 9l3 3-3 3M12 15h5",

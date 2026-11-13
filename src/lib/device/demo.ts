@@ -1,3 +1,4 @@
+import { crc16 } from "./sdfiles";
 import type { Transport } from "../transport/types";
 import { SimTarget } from "../boot/sim";
 import { emptyState, type DeviceState } from "./model";
@@ -59,8 +60,52 @@ export function demoState(): DeviceState {
 }
 
 /** Accepts every write, knows no reads: the demo state is already complete. */
+/** the microSD of the demo (forge-dsp-firmware#59): same commands and answers as the firmware */
+export class DemoCard {
+  files = new Map<string, Uint8Array>([["PRESET_1.CFG", new TextEncoder().encode('[96ELN]\nFILE_v10 = "gain.out.1=199"\n')]]);
+  private open: { name: string; mode: 1 | 2; block: number; data: number[] } | null = null;
+  line(kind: string, reg: string, line: string): string {
+    const val = /=(.*?)(;[0-9A-F]{2})?$/.exec(line)?.[1] ?? "";
+    const str = val.replace(/^"|"$/g, "");
+    const ok = ` *.1 ${reg} ok`, bad = ` !.1 ${reg} unknown command`;
+    const word = reg.split(".")[2] ?? "";
+    if (kind === "get") {
+      if (reg === "system.sd") return ` <.1 system.sd=[1,1,3,30424]`;
+      if (reg === "system.sd.files") return ` <.1 system.sd.files=[${[...this.files].map(([n, d]) => `"${n}:${d.length}"`).join(",")}]`;
+      if (word === "read" && this.open?.mode === 1) {
+        const d = this.files.get(this.open.name)!;
+        const b = d.subarray(this.open.block * 128, this.open.block * 128 + 128);
+        const out = ` <.1 system.sd.read=[${this.open.block},"${Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("").toUpperCase()}",${b.length ? crc16(b) : 0}]`;
+        if (b.length) this.open.block++;
+        return out;
+      }
+      return bad;
+    }
+    const name = str.toUpperCase();
+    switch (word) {
+      case "open": if (!this.files.has(name)) return bad; this.open = { name, mode: 1, block: 0, data: [] }; return ok;
+      case "create": this.open = { name, mode: 2, block: 0, data: [] }; return ok;
+      case "seek": if (this.open?.mode !== 1) return bad; this.open.block = Number(val); return ok;
+      case "write": {
+        const [hex, c] = str.split(":");
+        const b = new Uint8Array((hex.match(/../g) ?? []).map((h) => parseInt(h, 16)));
+        if (this.open?.mode !== 2 || parseInt(c, 16) !== crc16(b)) return bad;
+        this.open.data.push(...b);
+        return ok;
+      }
+      case "close":
+        if (this.open?.mode === 2) this.files.set(this.open.name, new Uint8Array(this.open.data));
+        this.open = null;
+        return ok;
+      case "delete": return this.files.delete(name) ? ok : bad;
+    }
+    return bad;
+  }
+}
+
 export class DemoTransport implements Transport {
   name = "Demo";
+  sd = new DemoCard();
   /** a simulated bootloader target, so the firmware page can be tried without a device */
   bytes = new SimTarget();
   private fn: (l: string) => void = () => {};
@@ -70,6 +115,10 @@ export class DemoTransport implements Transport {
     const m = /^(get|set)\.(\S+) ([^=;\s]+)/.exec(line);
     if (!m) return;
     let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
+    if (m[3].startsWith("system.sd")) {
+      setTimeout(() => this.fn(this.sd.line(m[1], m[3], line)), 15);
+      return;
+    }
     if (m[1] === "get" && m[3] === "system.vu") {  // music-like movement on the digital input
       const t = Date.now() / 1000;
       const l = Math.round(214 + 14 * Math.sin(t * 2.1) * Math.sin(t * 0.37) + 4 * Math.sin(t * 9));

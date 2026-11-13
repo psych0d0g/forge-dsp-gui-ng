@@ -15,6 +15,7 @@
   import ModcPage from "./pages/Modc.svelte";
   import Firmware from "./pages/Firmware.svelte";
   import Biquads from "./pages/Biquads.svelte";
+  import SdCard from "./pages/SdCard.svelte";
 
   const version = __APP_VERSION__;
   const commit = __APP_COMMIT__;
@@ -30,7 +31,7 @@
     { group: "Steuerung", items: [{ id: "modc", label: "Steuerblöcke" }, { id: "presets", label: "Presets" },
       { id: "biquads", label: "Biquad-Verteilung" }] },
     { group: "Werkzeuge", items: [
-      { id: "diagnose", label: "Diagnose" }, { id: "firmware", label: "Firmware" },
+      { id: "diagnose", label: "Diagnose" }, { id: "sdcard", label: "Speicherkarte" }, { id: "firmware", label: "Firmware" },
       { id: "console", label: "Konsole" }] },
   ];
 
@@ -145,6 +146,7 @@
     {:else if app.page === "presets"}<Presets />
     {:else if app.page === "modc"}<ModcPage />
     {:else if app.page === "biquads"}<Biquads />
+    {:else if app.page === "sdcard"}<SdCard />
     {:else if app.page === "firmware"}<Firmware />
     {:else if app.page === "console"}<Console />
     {/if}

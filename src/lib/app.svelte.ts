@@ -3,11 +3,12 @@ import { ForgeClient, type Answer, type Value } from "./protocol";
 import type { ByteLink, Transport } from "./transport/types";
 import { openWebSerial } from "./transport/webserial";
 import { openWebSocket } from "./transport/websocket";
-import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress } from "./device";
+import { applyAnswer, emptyState, inputDefaultName, isPort, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
+  type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
 export type PageId = "overview" | "mixer" | "filters" | "delay" | "modc" | "presets" | "biquads"
-  | "diagnose" | "firmware" | "console";
+  | "diagnose" | "firmware" | "console" | "sdcard";
 
 export const app = $state({
   page: "overview" as PageId,
@@ -31,7 +32,7 @@ function attach(t: Transport) {
   transport = t;
   client = new ForgeClient(t);
   client.onRaw((text, dir) => {
-    if (polling) return;  // the periodic status reads would flood the console
+    if (polling || sdBusy) return;  // status reads and file blocks would flood the console
     app.log.push({ dir, text: text.trimEnd() });
     if (app.log.length > 400) app.log.splice(0, app.log.length - 400);
   });
@@ -149,6 +150,33 @@ export async function setPoolLengths(core: number, lengths: number[], step: (tex
     await reload();
     return "";
   } finally {
+    app.exclusive = false;
+  }
+}
+
+// --- files on the microSD (forge-dsp-firmware#59) --------------------------------------------------
+let sdBusy = false;
+/**
+ * Runs a transfer with the card exclusively: no status reads in between, blocks not in the
+ * console. fn gets the link to the device.
+ */
+export async function withSd<T>(fn: (l: SdLink) => Promise<T>): Promise<T> {
+  const c = client;
+  if (!c) throw new Error("nicht verbunden");
+  const link: SdLink = {
+    get: (reg) => c.get(reg),
+    async set(reg, value) {
+      const r = await c.set(reg, value, { checksum: true });
+      const bad = r.find((a) => a.kind === "error");
+      return bad ? bad.message ?? "Fehler" : r.some((a) => a.kind === "info") ? "" : "keine Antwort";
+    },
+  };
+  app.exclusive = true;
+  sdBusy = true;
+  try {
+    return await fn(link);
+  } finally {
+    sdBusy = false;
     app.exclusive = false;
   }
 }
