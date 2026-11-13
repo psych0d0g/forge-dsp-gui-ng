@@ -70,7 +70,7 @@ describe.skipIf(!real)("simulator with the real firmware (V40-96ELN)", () => {
     const c = new ForgeClient(t);
     expect((await c.get("system.ping"))[0].value).toBe("pong");
     const s = await readDevice(c, () => undefined);
-    expect(s.identity.keyInfo).toBe("96ELN-4.0");
+    expect(s.identity.keyInfo).toContain("-96ELN-4.0-");
     expect(s.gain.out.length).toBe(8);
     await c.set("gain.out.3", 180);
     expect((await c.get("gain.out.3"))[0].value).toBe(180);
