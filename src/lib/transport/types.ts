@@ -6,6 +6,8 @@ export interface Transport {
   close(): Promise<void>;
   /** raw bytes of the same port, for the bootloader (USB only) */
   bytes?: ByteLink;
+  /** reopen the port at another rate (USB only; the Forge switches with system.baud.usb, #62) */
+  setBaud?(baud: number): Promise<void>;
 }
 
 /** raw byte access (see lib/boot/client.ts) */

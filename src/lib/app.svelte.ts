@@ -59,7 +59,9 @@ let client: ForgeClient | null = null;
 function attach(t: Transport) {
   transport = t;
   client = new ForgeClient(t);
+  usbBaud = 38400;
   client.onRaw((text, dir) => {
+    if (dir === "tx") lastTx = Date.now();
     if (sdBusy || isPollLine(text)) return;  // status reads and file blocks would flood the console
     app.log.push({ dir, text: text.trimEnd() });
     if (app.log.length > 400) app.log.splice(0, app.log.length - 400);
@@ -118,6 +120,7 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
           await bootloaderMode(bl);
           return;
         }
+        await usbFast();
       }
       app.status = "reading";
       app.device = await readDevice(client!, (p) => (app.progress = p));
@@ -135,6 +138,7 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
 }
 
 export async function disconnect() {
+  await usbSlow().catch(() => undefined);   // the original GUI finds it at 38400 at once
   await transport?.close().catch(() => undefined);
   transport = null;
   client = null;
@@ -157,6 +161,43 @@ export async function reload() {
   app.progress = null;
   app.status = "online";
 }
+
+// --- faster USB-COM (forge-dsp-firmware#62) -------------------------------------------------------
+/** the port firmware switches its USB-COM up to 460800 Bd on request (not stored: 38400 again after
+ *  a restart or 30 s without a line); the original firmware answers "unknown command" */
+export const USB_FAST = 460800;
+let usbBaud = 38400;
+let lastTx = 0;
+export async function usbFast() {
+  const tr = transport, c = client;
+  if (!tr?.setBaud || !c || usbBaud === USB_FAST) return;
+  const ok = (await c.set("system.baud.usb", USB_FAST / 1200, { timeoutMs: 1000 }).catch(() => [])).some((a) => a.kind === "info");
+  if (!ok) return;
+  await new Promise((r) => setTimeout(r, 30));   // the answer has left, the Forge switches
+  await tr.setBaud(USB_FAST);
+  usbBaud = USB_FAST;
+  if ((await c.get("system.ping", { timeoutMs: 800 }).catch(() => [])).some((a) => a.kind === "get")) {
+    c.quietMs = 100;   // lines of a wildcard answer come some ms apart at this rate (#21)
+    return;
+  }
+  // no answer at the fast rate: back (the Forge falls back by itself after 30 s at the latest)
+  await tr.setBaud(38400);
+  usbBaud = 38400;
+}
+/** back to 38400 (before a firmware update: the bootloader measures the rate itself) */
+export async function usbSlow() {
+  const tr = transport, c = client;
+  if (!tr?.setBaud || !c || usbBaud === 38400) return;
+  c.quietMs = 200;
+  await c.set("system.baud.usb", 32, { timeoutMs: 600 }).catch(() => []);
+  await new Promise((r) => setTimeout(r, 30));
+  await tr.setBaud(38400);
+  usbBaud = 38400;
+}
+// keep the fast rate: a line at least every 10 s, also while the tab is hidden (no status reads then)
+if (typeof window !== "undefined") setInterval(() => {
+  if (usbBaud !== 38400 && client && !app.exclusive && Date.now() - lastTx > 10000) client.get("system.ping").catch(() => []);
+}, 2000);
 
 // --- devices in the RS485 chain (#15) ------------------------------------------------------------
 /** further Forge behind the slave port answer as .2, .3, … (firmware cmd_route.c); 1 is this one */

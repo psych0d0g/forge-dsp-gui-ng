@@ -2,7 +2,7 @@
   import { t, tx } from "../lib/i18n/index.svelte";
   import { explain } from "../lib/errors";
   import { saveFile } from "../lib/saveFile";
-  import { app, bootReadDone, leaveBootloader, query, reload, updateAccess, waitForBootloader, withSd, type BootWaitState } from "../lib/app.svelte";
+  import { app, bootReadDone, leaveBootloader, usbFast, usbSlow, query, reload, updateAccess, waitForBootloader, withSd, type BootWaitState } from "../lib/app.svelte";
   import { backupInfo, freeSlot, isPort, parseScan, sdBackup, sdList, sdState, type BackupInfo } from "../lib/device";
   import { describeFlash } from "../lib/boot/identify";
   import { isNative } from "../lib/native";
@@ -202,6 +202,7 @@
         }
         app.exclusive = true;
       }
+      await usbSlow();   // the bootloader measures the rate at 38400 (forge-dsp-firmware#62)
       const io = updateAccess();
       if (!io) throw new Error(t("common.notConnected"));
       const r = await runUpdate({ ...io,
@@ -216,6 +217,7 @@
       app.exclusive = false;
       sdChecked = false; sd = null;
       await reload();
+      await usbFast();
     } catch (e) {
       const u = e instanceof UpdateError ? e : null;
       result = { ok: false, text: u ? `${tx(STEP_LABEL[u.step])}: ${explain(u.message)}` : explain(e), touched: u?.flashTouched };

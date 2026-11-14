@@ -15,7 +15,8 @@ export class ForgeClient {
   private listeners = new Set<(a: Answer) => void>();
   private rawListeners = new Set<(line: string, dir: "rx" | "tx") => void>();
 
-  constructor(private t: Transport, private timeoutMs = 1500, private quietMs = 200) {
+  /** quietMs: a wildcard answer is complete after this long without a line (shorter at a fast rate) */
+  constructor(private t: Transport, private timeoutMs = 1500, public quietMs = 200) {
     t.onLine((l) => this.onLine(l));
   }
 

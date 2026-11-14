@@ -32,36 +32,46 @@ export async function grantedPort(): Promise<SerialPortLike | null> {
 /** USB-COM of the Forge (CP2102): 38400 8N1 by default. Without a port the browser asks for one. */
 export async function openWebSerial(baudRate = 38400, chosen?: SerialPortLike): Promise<Transport> {
   const port = chosen ?? (await serialApi().requestPort());
-  await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: "none" });
-  lastIds = port.getInfo?.() ?? null;
   const listeners: ((l: string) => void)[] = [];
   const split = new LineSplitter((l) => listeners.forEach((f) => f(l)));
-  const reader = port.readable!.getReader();
-  const writer = port.writable!.getWriter();
-  let open = true;
   const queue = new ByteQueue();
-  (async () => {
-    const dec = new TextDecoder();
-    while (open) {
-      const { value, done } = await reader.read().catch(() => ({ value: undefined, done: true }));
-      if (done) break;
-      if (value) {
-        queue.push(value);
-        split.push(dec.decode(value, { stream: true }));
+  let reader: ReadableStreamDefaultReader<Uint8Array>, writer: WritableStreamDefaultWriter<Uint8Array>;
+  let loop: Promise<void> = Promise.resolve();
+  let open = false;
+  async function start(baud: number) {
+    await port.open({ baudRate: baud, dataBits: 8, stopBits: 1, parity: "none" });
+    lastIds = port.getInfo?.() ?? null;
+    reader = port.readable!.getReader();
+    writer = port.writable!.getWriter();
+    open = true;
+    const r = reader;
+    loop = (async () => {
+      const dec = new TextDecoder();
+      while (open) {
+        const { value, done } = await r.read().catch(() => ({ value: undefined, done: true }));
+        if (done) break;
+        if (value) {
+          queue.push(value);
+          split.push(dec.decode(value, { stream: true }));
+        }
       }
-    }
-  })();
+    })();
+  }
+  async function stop() {
+    open = false;
+    await reader.cancel().catch(() => undefined);
+    await loop;
+    reader.releaseLock();
+    writer.releaseLock();
+    await port.close().catch(() => undefined);   // gone already when the Forge was switched off
+  }
+  await start(baudRate);
   return {
     name: "USB",
     write: (line) => writer.write(new TextEncoder().encode(line)),
     onLine: (fn) => listeners.push(fn),
     bytes: { write: (data) => writer.write(data), read: (ms) => queue.read(ms), flush: () => queue.flush() },
-    close: async () => {
-      open = false;
-      await reader.cancel().catch(() => undefined);
-      reader.releaseLock();
-      writer.releaseLock();
-      await port.close().catch(() => undefined);   // gone already when the Forge was switched off
-    },
+    async setBaud(baud) { await stop(); queue.flush(); await start(baud); },
+    close: stop,
   };
 }

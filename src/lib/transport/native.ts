@@ -34,13 +34,15 @@ export async function openNativeSerial(path: string, baud = 38400): Promise<Tran
     queue.push(b);
     split.push(dec.decode(b, { stream: true }));
   };
-  await invoke("serial_open", { path, baud, onData });
+  const openAt = (b: number) => invoke<void>("serial_open", { path, baud: b, onData });
+  await openAt(baud);
   const send = (data: Uint8Array) => invoke<void>("serial_write", { data: Array.from(data) });
   return {
     name: `USB (${path.replace(/^\/dev\//, "")})`,
     write: (line) => send(new TextEncoder().encode(line)),
     onLine: (fn) => listeners.push(fn),
     bytes: { write: send, read: (ms) => queue.read(ms), flush: () => queue.flush() },
+    async setBaud(b) { queue.flush(); await openAt(b); },
     close: () => invoke<void>("serial_close"),
   };
 }
