@@ -99,7 +99,12 @@
     }
   }
   // output limiter (forge-dsp-firmware#58): threshold per output, attack/release for all
-  const LIM_STEPS = Array.from({ length: 49 }, (_, i) => (i ? -i * 5 : 0));   // 0 (off; not -0), -0.5 … -24 dB in tenths
+  // the knob turns the depth: 0 = off, clockwise down to -24 dB (tenths, steps of 0.5 dB)
+  const limShow = (depth: number) => (depth === 0 ? t("mixer.limiterOff") : `−${(depth / 10).toFixed(1)}`);
+  const limParse = (text: string) => {
+    const v = Number(text.replace(",", ".").replace("−", "-").trim());
+    return /^(aus|off|-|–)$/i.test(text.trim()) ? 0 : Number.isNaN(v) ? null : Math.round(Math.abs(v) * 2) * 5;
+  };
   function setLimit(o: number, tenths: number) {
     const L = d.limiter;
     if (!L) return;
@@ -222,12 +227,11 @@
           <span class="oname"><NameField value={outNameRaw(o)} placeholder={t("common.outputN", { n: o })} label={t("mixer.nameName", { name: t("common.outputN", { n: o }) })} onchange={(v) => setOutName(o, v)} /></span>
           <DbFader value={d.gain.out[o - 1]} scale={d.scales.out} dim={!!d.mute[o - 1]} label={t("mixer.levelName", { name: outName(o) })} onchange={(r) => outGain(o, r)} />
           {#if d.limiter}
-            <label class="lim" class:on={(d.limiter.t[o - 1] ?? 0) < 0} class:act={limiting(o)} title={t("mixer.limiterTitle")}>
-              <span>{t("mixer.limiter")}</span>
-              <select value={d.limiter.t[o - 1] ?? 0} aria-label={t("mixer.limiterOf", { name: outName(o) })}
-                onchange={(e) => setLimit(o, Number(e.currentTarget.value))}>
-                {#each LIM_STEPS as s}<option value={s}>{s === 0 ? t("mixer.limiterOff") : `${(s / 10).toFixed(1)} dB`}</option>{/each}
-              </select></label>
+            <div class="lim" class:on={(d.limiter.t[o - 1] ?? 0) < 0} class:act={limiting(o)} title={t("mixer.limiterTitle")}>
+              <Knob size={40} caption={t("mixer.limiter")} min={0} max={240} step={5} value={-(d.limiter.t[o - 1] ?? 0)}
+                display={limShow} parse={limParse} label={t("mixer.limiterOf", { name: outName(o) })}
+                onchange={(v) => setLimit(o, v ? -v : 0)} />
+            </div>
           {/if}
           <div class="obtn">
             <button class="sq mute" class:on={!!d.mute[o - 1]} aria-pressed={!!d.mute[o - 1]} title={t("mixer.mute")} onclick={() => toggle("mute", o)}>M</button>
@@ -303,10 +307,9 @@
   .oname { width: 100%; font-size: .78rem; }
   .oname :global(input) { text-align: center; margin: 0; padding: .15rem .1rem; }
   .obtn { display: flex; gap: .25rem; }
-  .lim { display: grid; justify-items: center; gap: .05rem; font-size: .66rem; color: var(--muted); }
-  .lim select { font: inherit; font-size: .7rem; width: 4.1rem; padding: .1rem; border-radius: 5px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
-  .lim.on select { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
-  .lim.act span { color: var(--warn); font-weight: 650; }
+  .lim { display: grid; justify-items: center; border-radius: 8px; padding: .1rem 0; transition: box-shadow .15s; }
+  .lim:not(.on) { opacity: .6; }
+  .lim.act { box-shadow: 0 0 0 2px var(--warn); }
   .limtimes { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: .7rem; font-size: .85rem; }
   .limtimes input { width: 4rem; font: inherit; padding: .15rem .3rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
   .sq { width: 1.8rem; height: 1.8rem; padding: 0; font-weight: 650; color: var(--muted); font-size: .85rem; }

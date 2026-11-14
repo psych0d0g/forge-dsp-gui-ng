@@ -87,9 +87,11 @@ test("a restart of the device (system.boot) reconnects to the same state", async
 test("output limiter: a threshold set in the mixer reaches the firmware", async ({ page }) => {
   await start(page);
   await nav(page, "Mixer");
-  const sel = page.getByLabel(/^Limiter /).first();
-  await expect(sel).toBeVisible();
-  await sel.selectOption("-60");
+  const field = page.getByLabel(/^Limiter .*, Wert$/).first();   // the value field of the knob
+  await expect(field).toHaveValue("aus");
+  await field.fill("6");
+  await field.press("Enter");
+  await expect(field).toHaveValue("−6.0");
   await page.waitForTimeout(500);
   await nav(page, "Konsole");
   await page.getByLabel("Befehl").fill("get.1 system.dsp.limiter");
