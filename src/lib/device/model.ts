@@ -283,6 +283,15 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
       return true;
     case "biquad":
       if (p[1] === "clickless") { s.clickless = num(v); return true; }
+      if (p[1] === "used" && p.length === 2) {
+        // forge-dsp-firmware#64: after the places in use, [CH,length,…]; the others are empty
+        const l = nums(v);
+        for (let i = 0; i + 1 < l.length; i += 2) {
+          const bq = (s.biquads[l[i]] ??= {});
+          for (let k = 1; k <= l[i + 1]; k++) bq[k] ??= { type: 0, f: 0, gain: 0, q: 0, b: 0, flags: 0 };
+        }
+        return true;
+      }
       if (p.length === 3 && /^\d+$/.test(p[1]) && /^\d+$/.test(p[2])) {
         const b = nums(v);
         if (b.length < 5) return false;

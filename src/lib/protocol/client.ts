@@ -23,7 +23,7 @@ export class ForgeClient {
   onAnswer(fn: (a: Answer) => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   onRaw(fn: (line: string, dir: "rx" | "tx") => void) { this.rawListeners.add(fn); return () => this.rawListeners.delete(fn); }
 
-  get(reg: string, o?: LineOptions) { const x = this.opts(o); return this.request(getLine(reg, x), reg, o?.timeoutMs, x.target); }
+  get(reg: string, o?: LineOptions) { const x = this.opts(o); return this.request(getLine(reg, x), reg, o?.timeoutMs, x.target, o?.until); }
   set(reg: string, v: Value, o?: LineOptions) { const x = this.opts(o); return this.request(setLine(reg, v, x), reg, o?.timeoutMs, x.target); }
   setRaw(reg: string, valueText: string, o?: LineOptions) { const x = this.opts(o); return this.request(setLineRaw(reg, valueText, x), reg, o?.timeoutMs, x.target); }
   /** raw line from a console; resolves with the answers seen until quiet */
@@ -39,7 +39,7 @@ export class ForgeClient {
     else for (const f of this.listeners) f(a);
   }
 
-  private request(line: string, reg: string, timeoutMs = this.timeoutMs, target?: Target): Promise<Answer[]> {
+  private request(line: string, reg: string, timeoutMs = this.timeoutMs, target?: Target, until?: string): Promise<Answer[]> {
     const device = typeof target === "number" ? target : null;
     const run = () =>
       new Promise<Answer[]>((resolve, reject) => {
@@ -56,6 +56,12 @@ export class ForgeClient {
           got.push(a);
           if (a.kind === "error") return finish();
           if (!wild && a.register === reg) return finish();
+          if (until) {   // ends with that line; meanwhile each line may take up to timeoutMs
+            if (a.register === until) return finish();
+            clearTimeout(timer);
+            timer = setTimeout(() => finish(), timeoutMs);
+            return;
+          }
           clearTimeout(timer);
           timer = setTimeout(() => finish(), this.quietMs);
         } };

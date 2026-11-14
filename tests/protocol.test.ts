@@ -89,3 +89,16 @@ describe("client", () => {
     await expect(c.get("system.ping")).rejects.toThrow(/timeout/);
   });
 });
+
+describe("until: a wildcard answer with pauses (forge-dsp-firmware#64)", () => {
+  it("waits for the closing line instead of a quiet time", async () => {
+    const lines: ((l: string) => void)[] = [];
+    const t = { name: "t", write: async () => {
+      setTimeout(() => lines.forEach((f) => f(" <.1 biquad.3.2=[1,1000,30,707,0,128]")), 10);
+      setTimeout(() => lines.forEach((f) => f(" <.1 biquad.used=[3,4]")), 500);   // after a pause longer than quietMs
+    }, onLine: (f: (l: string) => void) => lines.push(f), close: async () => {} };
+    const c = new ForgeClient(t, 1500, 100);
+    const a = await c.get("biquad.*.used", { until: "biquad.used" });
+    expect(a.map((x) => x.register)).toEqual(["biquad.3.2", "biquad.used"]);
+  });
+});

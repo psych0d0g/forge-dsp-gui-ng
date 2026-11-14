@@ -499,3 +499,14 @@ describe("output limiter (forge-dsp-firmware#58)", () => {
     expect(o.limiter).toBeNull();
   });
 });
+
+describe("only the biquads in use (forge-dsp-firmware#64)", () => {
+  it("fills the empty places from the closing line", () => {
+    const s = emptyState();
+    for (const l of [" <.1 biquad.3.2=[1,1000,30,707,0,128]", " <.1 biquad.used=[3,4,35,2]"]) applyAnswer(s, parseAnswer(l)!);
+    expect(Object.keys(s.biquads[3])).toEqual(["1", "2", "3", "4"]);
+    expect(s.biquads[3][2]).toEqual({ type: 1, f: 1000, gain: 30, q: 707, b: 0, flags: 128 });
+    expect(s.biquads[3][1].type).toBe(0);
+    expect(Object.keys(s.biquads[35])).toEqual(["1", "2"]);
+  });
+});

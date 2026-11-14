@@ -75,6 +75,11 @@ export async function readDevice(
     let answers: Answer[] | null = null;
     // a lost answer (38400 Bd, a device busy with a preset load) is asked once more; an error answer
     // ("unknown command") is an answer and ends it
+    // port firmware with forge-dsp-firmware#64: only the biquads in use (most places are empty)
+    if (reg === "biquad.*" && state.identity.port !== null) {
+      const used = await client.get("biquad.*.used", { until: "biquad.used", timeoutMs: 3000 }).catch(() => null);
+      if (used?.some((a) => a.register === "biquad.used")) answers = used;
+    }
     for (let t = 0; t < 2 && !answers; t++) {
       try {
         answers = await client.get(reg);
