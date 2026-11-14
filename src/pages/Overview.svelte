@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, inName, meter, outName, type PageId } from "../lib/app.svelte";
-  import { INPUT_PAIRS, rawToDb } from "../lib/device";
+  import { decodeStartup, formatUptime, INPUT_PAIRS, isPort, rawToDb } from "../lib/device";
   import Icon from "../components/Icon.svelte";
   import LevelBar from "../components/LevelBar.svelte";
   import { t } from "../lib/i18n/index.svelte";
@@ -12,6 +12,15 @@
   const activeBq = $derived(allBq.filter((b) => b.type !== 0 && (b.flags & 0x80) !== 0).length);
   const delayed = $derived(d.delay.out.filter((x) => x > 0).length);
   const go = (p: PageId) => (app.page = p);
+  // start-up times and uptime (forge-dsp-firmware#67); the uptime runs on between two reads
+  const start = $derived(decodeStartup(d.startup));
+  let now = $state(Date.now());
+  $effect(() => {
+    const iv = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(iv);
+  });
+  const uptime = $derived(d.uptime ? d.uptime.ms + Math.max(0, now - d.uptime.at) : null);
+  const sec = (ms: number) => (ms / 1000).toFixed(ms < 10000 ? 2 : 1);
   const db = (raw: number) => {
     const s = d.scales.out;
     if (!s) return "";
@@ -96,6 +105,31 @@
       <dt>{t("common.errorCounters")}</dt><dd class="num">{d.errors.length ? t("overview.nEntries", { n: d.errors.length }) : t("common.none")}</dd>
     </dl>
   </section>
+  {#if isPort(d)}
+    <section class="panel tile" data-testid="startup">
+      <h3>{t("startup.title")}</h3>
+      {#if start}
+        <dl>
+          {#if uptime !== null}<dt>{t("startup.uptime")}</dt><dd class="num">{formatUptime(uptime)}</dd>{/if}
+          <dt>{t("startup.toSound")}</dt><dd class="num">{start.total !== null ? `${sec(start.total)} s` : t("startup.notReached")}</dd>
+        </dl>
+        {#if start.total}
+          <div class="bar" aria-hidden="true">
+            {#each start.stages as s, i}{#if s.ms}<span class="seg" class:warn={i === 0 && start.stuck} style="flex-grow:{s.ms}; --o:{0.35 + 0.65 * ((i % 4) / 3)}" title="{t(s.key)}: {sec(s.ms)} s"></span>{/if}{/each}
+          </div>
+        {/if}
+        {#if start.stuck}<p class="warn small">{t("startup.stuck", { s: sec(start.bootloader) })}</p>{/if}
+        <dl class="stages">
+          {#each start.stages as s}
+            <dt title={s.hint ? t(s.hint) : ""}>{t(s.key)}</dt><dd class="num">{s.ms === null ? t("startup.notReached") : `${sec(s.ms)} s`}</dd>
+          {/each}
+        </dl>
+      {:else}
+        <dl>{#if uptime !== null}<dt>{t("startup.uptime")}</dt><dd class="num">{formatUptime(uptime)}</dd>{/if}</dl>
+        <p class="muted small">{t("startup.needs")}</p>
+      {/if}
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -126,6 +160,13 @@
   dl { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1.25rem; margin: .6rem 0 0; }
   dt { color: var(--muted); }
   dd { margin: 0; overflow-wrap: anywhere; }
+  .bar { display: flex; height: .55rem; border-radius: 4px; overflow: hidden; margin: .7rem 0 .2rem; gap: 1px; background: var(--line); }
+  .seg { min-width: 2px; background: color-mix(in srgb, var(--accent) calc(var(--o) * 100%), var(--raised)); }
+  .seg.warn { background: var(--warn); }
+  .stages { font-size: .85rem; }
+  .stages dt { cursor: help; }
+  .warn { color: var(--warn); }
+  .small { font-size: .82rem; margin: .4rem 0 0; }
   @media (max-width: 62rem) {
     .flow { grid-template-columns: 1fr; }
     .arrow { width: 2px; height: 1rem; justify-self: center; }

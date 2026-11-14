@@ -100,6 +100,11 @@ export interface DeviceState {
   events: Record<number, number>;
   /** MCU temperature in °C */
   temperature: number | null;
+  /** ms from the clock start to each start phase, -1 = not reached, last: ms in the bootloader
+   * before (system.startup.time, forge-dsp-firmware#67); null = the firmware has none */
+  startup: number[] | null;
+  /** ms since power-on as read (system.uptime) and when it was read (Date.now()); null = none */
+  uptime: { ms: number; at: number } | null;
 }
 
 export function emptyState(): DeviceState {
@@ -130,6 +135,8 @@ export function emptyState(): DeviceState {
     limiter: null,
     events: {},
     temperature: null,
+    startup: null,
+    uptime: null,
   };
 }
 
@@ -236,6 +243,15 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
         case "supply":
           if (p.length === 2) { s.supply = v; return true; }
           return false;
+        case "startup":
+          if (p.length === 3 && p[2] === "time") { s.startup = nums(v); return true; }
+          return false;
+        case "uptime": {
+          const u = nums(v);
+          if (p.length !== 2 || u.length !== 2) return false;
+          s.uptime = { ms: u[0] * 1000 + u[1], at: Date.now() };
+          return true;
+        }
         case "temperature": {
           // without a unit the firmware answers in kelvin (as the original); "nop" = no reading
           const t = num(v);

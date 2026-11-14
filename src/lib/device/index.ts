@@ -11,3 +11,4 @@ export * from "./forgelog";
 export * from "./bqcopy";
 export * from "./master";
 export * from "./compare";
+export * from "./startup";
