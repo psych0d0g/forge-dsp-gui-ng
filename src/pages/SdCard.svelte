@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { t } from "../lib/i18n/index.svelte";
+  import { t, tx } from "../lib/i18n/index.svelte";
   import { explain } from "../lib/errors";
   import { saveFile } from "../lib/saveFile";
-  import { app, withSd } from "../lib/app.svelte";
-  import { isPort, sdDelete, sdDownload, sdList, sdNameFor, sdState, sdUpload, validSdName, type SdFile, type SdState } from "../lib/device";
+  import { afterRestart, app, withSd } from "../lib/app.svelte";
+  import { backupInfoText, cardBackups, isPort, sdDelete, sdDownload, sdList, sdNameFor, sdRestore, sdState, sdUpload, validSdName,
+    type CardBackup, type SdFile, type SdState } from "../lib/device";
   import Icon from "../components/Icon.svelte";
 
   // Files on the microSD in the Forge (port firmware, forge-dsp-firmware#59), transferred over the
@@ -38,14 +39,36 @@
     }
   }
 
+  // backups of the Forge on the card (forge-dsp-firmware#61, #65)
+  let backups = $state<CardBackup[]>([]);
   const refresh = () =>
     run(t("sdcard.readingCard"), () =>
       withSd(async (l) => {
         const c = await sdState(l);
         files = c?.mounted ? await sdList(l) : [];
         card = c;
+        const b = cardBackups(files);
+        for (const x of b) x.info = await backupInfoText(l, x.slot, files).catch(() => "");
+        backups = b;
         loaded = true;
       }));
+  const slotFiles = (slot: number) => files.filter((f) => new RegExp(`_${slot}\\.(BIN|TXT)$`, "i").test(f.name));
+  async function restore(b: CardBackup, p: { part: string; label: string }) {
+    if (!confirm(t("sdcard.restoreConfirm", { what: tx(p.label), slot: b.slot, info: b.info || "?" }))) return;
+    let ok = false;
+    await run(t("sdcard.restoring", { what: tx(p.label), slot: b.slot }), () => withSd(async (l) => { await sdRestore(l, p.part, b.slot); ok = true; }));
+    if (ok) {
+      await afterRestart();
+      await refresh();   // the card as the restarted Forge sees it
+      note = t("sdcard.restoredRestart", { what: tx(p.label), slot: b.slot });
+    }
+  }
+  async function removeBackup(b: CardBackup) {
+    if (!confirm(t("sdcard.deleteBackupConfirm", { slot: b.slot }))) return;
+    const mine = slotFiles(b.slot);
+    await run(t("sdcard.deletingBackup", { slot: b.slot }), () => withSd(async (l) => { for (const f of mine) await sdDelete(l, f.name); }));
+    await refresh();
+  }
 
   $effect(() => {
     if (app.status === "online" && port && !loaded) refresh();
@@ -173,6 +196,33 @@
       {/if}
     {/if}
   </section>
+  {#if loaded && card?.mounted}
+    <section class="panel box backups">
+      <h3>{t("sdcard.backupsTitle")}</h3>
+      {#if backups.length}
+        <table>
+          <thead><tr><th>{t("sdcard.slot")}</th><th>{t("sdcard.backupOf")}</th><th>{t("sdcard.restoreParts")}</th><th></th></tr></thead>
+          <tbody>
+            {#each backups as b (b.slot)}
+              <tr>
+                <td class="num">{b.slot}</td>
+                <td>{b.info || t("sdcard.noInfo")}{#if b.flash}<span class="muted small"> · {t("sdcard.withFlash")}</span>{/if}</td>
+                <td class="acts left">
+                  {#each b.parts as p}
+                    <button onclick={() => restore(b, p)} disabled={!!busy || !b.info} title={b.info ? "" : t("sdcard.noInfoTitle")}>{tx(p.label)}</button>
+                  {/each}
+                </td>
+                <td class="acts"><button class="ghost danger" onclick={() => removeBackup(b)} disabled={!!busy}>{t("sdcard.delete")}</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        <p class="muted small">{t("sdcard.backupsHint")}</p>
+      {:else}
+        <p class="muted">{t("sdcard.noBackups")}</p>
+      {/if}
+    </section>
+  {/if}
   <p class="muted small hint">{t("sdcard.forgeLoadsUploadedPRESET")}</p>
 {/if}
 
@@ -202,5 +252,8 @@
   .ok { color: var(--muted); margin: 0; }
   .small { font-size: .8rem; }
   .hint { margin-top: .6rem; }
+  .backups { margin-top: .75rem; }
+  .acts.left { text-align: left; }
+  .acts.left button { margin: .1rem .3rem .1rem 0; }
   @media (max-width: 40rem) { .acts button { margin: .15rem 0 .15rem .3rem; } }
 </style>

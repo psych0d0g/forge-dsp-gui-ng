@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseAnswer } from "../src/lib/protocol";
 import { encodeValue, type Value } from "../src/lib/protocol/request";
-import { backupInfo, crc16, freeSlot, sdBackup, sdDelete, sdDownload, sdList, sdNameFor, sdUpload, usedSlots, validSdName, type SdLink } from "../src/lib/device";
+import { backupInfo, backupInfoText, cardBackups, crc16, freeSlot, sdBackup, sdRestore, sdDelete, sdDownload, sdList, sdNameFor, sdUpload, usedSlots, validSdName, type SdLink } from "../src/lib/device";
 import { DemoCard } from "../src/lib/device/demo";
 
 const calls: string[] = [];
@@ -102,5 +102,24 @@ describe("backup on the card before an update (forge-dsp-firmware#61)", () => {
   it("a failing part stops the backup", async () => {
     const l = link(new DemoCard(), (line, reg) => (reg === "system.sd.backup.preset" ? ` !.1 ${reg} unknown command` : line));
     await expect(sdBackup(l, { flash: 262144, eeprom: 4096, preset: 65536, cores: 3 })).rejects.toThrow(/Presets/);
+  });
+});
+
+describe("backups back from the card (forge-dsp-firmware#65)", () => {
+  it("lists the slots with the parts that can go back, reads INFO and restores", async () => {
+    const card = new DemoCard();
+    const l = link(card);
+    await sdBackup(l, { flash: 262144, eeprom: 4096, preset: 65536, cores: 2 });
+    const files = await sdList(l);
+    const [b] = cardBackups(files);
+    expect(b.slot).toBe(1);
+    expect(b.flash).toBe(true);
+    expect(b.parts.map((p) => p.part)).toEqual(["1", "2", "eeprom", "preset"]);
+    expect(await backupInfoText(l, 1, files)).toBe("96ELN-4.0, 2.2.0-demo");
+    calls.length = 0;
+    await sdRestore(l, "preset", 1);
+    expect(calls).toEqual(["system.sd.restore.preset=1"]);
+    card.files.delete("INFO_1.TXT");
+    await expect(sdRestore(l, "eeprom", 1)).rejects.toThrow();     // without INFO the firmware refuses
   });
 });

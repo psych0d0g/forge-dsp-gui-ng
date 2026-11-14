@@ -194,6 +194,24 @@ export async function usbSlow() {
   await tr.setBaud(38400);
   usbBaud = 38400;
 }
+/** after the Forge restarted by itself (backup restored, …): it comes back at 38400; read it again */
+export async function afterRestart() {
+  const tr = transport, c = client;
+  if (!tr || !c || app.demo) return;
+  app.status = "reading";
+  if (usbBaud !== 38400 && tr.setBaud) { await tr.setBaud(38400); usbBaud = 38400; c.quietMs = 200; }
+  await new Promise((r) => setTimeout(r, 4000));
+  for (let i = 0; i < 40 && !(await firmwareAnswers()); i++) await new Promise((r) => setTimeout(r, 1000));
+  try {
+    await usbFast();
+    await reload();
+    loadInNames();
+  } catch (e) {
+    app.error = explain(e);
+    app.status = "online";
+  }
+}
+
 // keep the fast rate: a line at least every 10 s, also while the tab is hidden (no status reads then)
 if (typeof window !== "undefined") setInterval(() => {
   if (usbBaud !== 38400 && client && !app.exclusive && Date.now() - lastTx > 10000) client.get("system.ping").catch(() => []);

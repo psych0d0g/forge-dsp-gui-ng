@@ -131,6 +131,15 @@ export class DemoCard {
           preset: ["PRESET", DEMO_BACKUP[2]], 1: ["DSP1", 65536], 2: ["DSP2", 65536], 3: ["DSP3", 65536] };
         if (!sizes[part]) return bad;
         this.files.set(`${sizes[part][0]}_${slot}.BIN`, new Uint8Array(sizes[part][1]));
+        this.files.set(`INFO_${slot}.TXT`, new TextEncoder().encode("96ELN-4.0\n2.2.0-demo\n"));
+        return ok;
+      }
+      case "restore": {  // forge-dsp-firmware#65: needs INFO_S.TXT; the real Forge restarts afterwards
+        const part = reg.split(".")[3] ?? "", slot = Number(val);
+        const file = { eeprom: "EEPROM", preset: "PRESET", 1: "DSP1", 2: "DSP2", 3: "DSP3" }[part];
+        if (!file) return bad;
+        if (!this.files.has(`INFO_${slot}.TXT`)) return ` !.1 ${reg} unknown para`;
+        if (!this.files.has(`${file}_${slot}.BIN`)) return bad;
         return ok;
       }
     }

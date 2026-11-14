@@ -30,4 +30,13 @@ test("update with the backup on the card in the Forge", async ({ page }) => {
   await expect(page.getByText(/^Fertig: \d+ Bytes geschrieben und geprüft/)).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/Gesichert auf der Speicherkarte im Forge, Platz 1: FLASH_1\.BIN, EEPROM_1\.BIN, PRESET_1\.BIN, DSP1_1\.BIN/)).toBeVisible();
   expect(downloads).toBe(0);
+
+  // the way back (forge-dsp-firmware#65): the backup is listed on the memory card page and can be restored
+  await page.locator("nav").getByRole("button", { name: "Speicherkarte", exact: true }).click();
+  const row = page.locator("section.backups tr", { hasText: "96ELN-4.0" });
+  await expect(row).toContainText("mit Firmware");
+  page.once("dialog", (d) => d.accept());
+  await row.getByRole("button", { name: "Presets", exact: true }).click();
+  await expect(page.getByText(/„Presets“ aus Platz 1 zurückgespielt/)).toBeVisible();
 });
+

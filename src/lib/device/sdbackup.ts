@@ -1,5 +1,5 @@
 import { t, tk, tx } from "../i18n/index.svelte";
-import { sdList, type SdFile, type SdLink } from "./sdfiles";
+import { sdDownload, sdList, type SdFile, type SdLink } from "./sdfiles";
 
 /**
  * Backup on the microSD before a firmware update (forge-dsp-firmware#61): the firmware copies
@@ -64,4 +64,40 @@ export async function sdBackup(l: SdLink, info: BackupInfo, progress: (i: number
     if (!f || f.size !== p.size) throw new Error(`${p.file}: ${t("sdcard.insteadBBytesCard", { a: f?.size ?? 0, b: p.size })}`);
   }
   return { slot, parts };
+}
+
+// --- the way back (forge-dsp-firmware#65) -------------------------------------------------------
+/** a backup on the card: its slot, the parts that can go back, and INFO_S.TXT (device, firmware) */
+export interface CardBackup { slot: number; parts: { part: string; label: string; file: string }[]; flash: boolean; info: string }
+
+const PARTS_BACK: [RegExp, (m: RegExpExecArray) => { part: string; label: string }][] = [
+  [/^EEPROM_\d\.BIN$/i, () => ({ part: "eeprom", label: tk("sdcard.partSettings") })],
+  [/^PRESET_\d\.BIN$/i, () => ({ part: "preset", label: tk("sdcard.partPresets") })],
+  [/^DSP([1-3])_\d\.BIN$/i, (m) => ({ part: m[1], label: `DSP ${m[1]}` })],
+];
+
+/** backups from the file list (without reading anything) */
+export function cardBackups(files: SdFile[]): CardBackup[] {
+  return usedSlots(files).map((slot) => {
+    const mine = files.filter((f) => new RegExp(`_${slot}\\.(BIN|TXT)$`, "i").test(f.name));
+    const parts = mine.flatMap((f) => {
+      for (const [re, of] of PARTS_BACK) { const m = re.exec(f.name); if (m) return [{ ...of(m), file: f.name.toUpperCase() }]; }
+      return [];
+    }).sort((a, b) => a.file.localeCompare(b.file));
+    return { slot, parts, flash: mine.some((f) => /^FLASH_/i.test(f.name)), info: "" };
+  });
+}
+
+/** "96ELN-4.0, 2.1.0" from INFO_S.TXT; "" without it (older backups: the firmware refuses them) */
+export async function backupInfoText(l: SdLink, slot: number, files: SdFile[]): Promise<string> {
+  const f = files.find((x) => x.name.toUpperCase() === `INFO_${slot}.TXT`);
+  if (!f) return "";
+  const lines = new TextDecoder().decode(await sdDownload(l, f.name, f.size)).split("\n").map((x) => x.trim()).filter(Boolean);
+  return lines.join(", ");
+}
+
+/** one part back from slot S; the Forge restarts afterwards (an EEPROM of 64 KB takes about 16 s) */
+export async function sdRestore(l: SdLink, part: string, slot: number): Promise<void> {
+  const err = await l.set(`system.sd.restore.${part}`, slot, 60000);
+  if (err) throw new Error(err);
 }
