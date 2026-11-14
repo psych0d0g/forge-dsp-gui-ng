@@ -93,6 +93,9 @@ export interface DeviceState {
   vu: number[] | null;
   /** output levels 1..8, same scale (system.vu.out, forge-dsp-firmware#52); null = not available */
   vuOut: number[] | null;
+  /** output limiter of the port firmware (forge-dsp-firmware#58): threshold per output in tenths of
+   *  dBFS (0 = off, -240..0), attack in tenths of ms, release in ms; null without the block */
+  limiter: { t: number[]; attack: number | null; release: number | null } | null;
   /** event values read with event.N.value (the master fader uses those of the volume block) */
   events: Record<number, number>;
   /** MCU temperature in °C */
@@ -124,6 +127,7 @@ export function emptyState(): DeviceState {
     supply: null,
     vu: null,
     vuOut: null,
+    limiter: null,
     events: {},
     temperature: null,
   };
@@ -223,6 +227,11 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
         case "vu":
           if (p.length === 2) { s.vu = nums(v); return true; }
           if (p.length === 3 && p[2] === "out") { s.vuOut = nums(v); return true; }
+          return false;
+        case "dsp":
+          if (p[2] !== "limiter") return false;
+          if (p.length === 3) { s.limiter = { attack: null, release: null, ...s.limiter, t: nums(v) }; return true; }
+          if (p.length === 4 && (p[3] === "attack" || p[3] === "release") && s.limiter) { s.limiter[p[3]] = num(v); return true; }
           return false;
         case "supply":
           if (p.length === 2) { s.supply = v; return true; }

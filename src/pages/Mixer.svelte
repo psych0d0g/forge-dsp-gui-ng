@@ -2,7 +2,7 @@
   import { t } from "../lib/i18n/index.svelte";
   import { app, inDefault, inPos, inNameRaw, outName, outNameRaw, setInName, setOutName, write } from "../lib/app.svelte";
   import { inputsLeftFirst, limitsOf, MIXER_BUS_COLUMNS, MIXER_BUS_ROWS, MIXER_INPUTS, mixerRowOfOutput, sourceNames, sumsActive,
-    sumsMapping, sumsShares } from "../lib/device";
+    sumsMapping, sumsShares, vuToDb } from "../lib/device";
   import Knob from "../components/Knob.svelte";
   import DbFader from "../components/DbFader.svelte";
   import NameField from "../components/NameField.svelte";
@@ -98,6 +98,28 @@
       write(`gain.out.${c}`, v);
     }
   }
+  // output limiter (forge-dsp-firmware#58): threshold per output, attack/release for all
+  const LIM_STEPS = Array.from({ length: 49 }, (_, i) => (i ? -i * 5 : 0));   // 0 (off; not -0), -0.5 … -24 dB in tenths
+  function setLimit(o: number, tenths: number) {
+    const L = d.limiter;
+    if (!L) return;
+    L.t[o - 1] = tenths;
+    write(`system.dsp.limiter.${o}`, tenths);
+  }
+  function setLimTime(which: "attack" | "release", e: Event) {
+    const L = d.limiter, el = e.currentTarget as HTMLInputElement;
+    const x = Number(el.value.replace(",", "."));
+    if (!L || Number.isNaN(x)) return;
+    const v = which === "attack" ? Math.round(Math.min(100, Math.max(0.1, x)) * 10) : Math.round(Math.min(5000, Math.max(1, x)));
+    L[which] = v;
+    el.value = which === "attack" ? String(v / 10) : String(v);
+    write(`system.dsp.limiter.${which}`, v);
+  }
+  /** the output level reaches the threshold: the limiter works */
+  const limiting = (o: number) => {
+    const T = d.limiter?.t[o - 1] ?? 0, v = d.vuOut?.[o - 1];
+    return T < 0 && v !== undefined && vuToDb(v) >= T / 10 - 0.5;
+  };
   function toggle(kind: "mute" | "phase", ch: number) {
     const v = d[kind][ch - 1] ? 0 : 1;
     d[kind][ch - 1] = v;
@@ -199,6 +221,14 @@
           <span class="chn num">{o}</span>
           <span class="oname"><NameField value={outNameRaw(o)} placeholder={t("common.outputN", { n: o })} label={t("mixer.nameName", { name: t("common.outputN", { n: o }) })} onchange={(v) => setOutName(o, v)} /></span>
           <DbFader value={d.gain.out[o - 1]} scale={d.scales.out} dim={!!d.mute[o - 1]} label={t("mixer.levelName", { name: outName(o) })} onchange={(r) => outGain(o, r)} />
+          {#if d.limiter}
+            <label class="lim" class:on={(d.limiter.t[o - 1] ?? 0) < 0} class:act={limiting(o)} title={t("mixer.limiterTitle")}>
+              <span>{t("mixer.limiter")}</span>
+              <select value={d.limiter.t[o - 1] ?? 0} aria-label={t("mixer.limiterOf", { name: outName(o) })}
+                onchange={(e) => setLimit(o, Number(e.currentTarget.value))}>
+                {#each LIM_STEPS as s}<option value={s}>{s === 0 ? t("mixer.limiterOff") : `${(s / 10).toFixed(1)} dB`}</option>{/each}
+              </select></label>
+          {/if}
           <div class="obtn">
             <button class="sq mute" class:on={!!d.mute[o - 1]} aria-pressed={!!d.mute[o - 1]} title={t("mixer.mute")} onclick={() => toggle("mute", o)}>M</button>
             <button class="sq" class:on={!!d.phase[o - 1]} aria-pressed={!!d.phase[o - 1]} title={t("mixer.invertPolarity180")} onclick={() => toggle("phase", o)}>Ø</button>
@@ -210,6 +240,16 @@
         </div>
       {/each}
     </div>
+    {#if d.limiter}
+      <div class="limtimes">
+        <span class="muted">{t("mixer.limiterAll")}</span>
+        <label>{t("mixer.attack")} <input class="num" inputmode="decimal" value={d.limiter.attack !== null ? d.limiter.attack / 10 : ""}
+          onchange={(e) => setLimTime("attack", e)} /> ms</label>
+        <label>{t("mixer.release")} <input class="num" inputmode="numeric" value={d.limiter.release ?? ""}
+          onchange={(e) => setLimTime("release", e)} /> ms</label>
+        <span class="muted small">{t("mixer.limiterHint")}</span>
+      </div>
+    {/if}
   </section>
 {/if}
 
@@ -263,6 +303,12 @@
   .oname { width: 100%; font-size: .78rem; }
   .oname :global(input) { text-align: center; margin: 0; padding: .15rem .1rem; }
   .obtn { display: flex; gap: .25rem; }
+  .lim { display: grid; justify-items: center; gap: .05rem; font-size: .66rem; color: var(--muted); }
+  .lim select { font: inherit; font-size: .7rem; width: 4.1rem; padding: .1rem; border-radius: 5px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
+  .lim.on select { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+  .lim.act span { color: var(--warn); font-weight: 650; }
+  .limtimes { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: .7rem; font-size: .85rem; }
+  .limtimes input { width: 4rem; font: inherit; padding: .15rem .3rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
   .sq { width: 1.8rem; height: 1.8rem; padding: 0; font-weight: 650; color: var(--muted); font-size: .85rem; }
   .sq.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--accent); }
   .sq.mute.on { background: color-mix(in srgb, var(--err) 22%, transparent); border-color: var(--err); color: var(--err); }

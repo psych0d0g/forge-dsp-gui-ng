@@ -487,3 +487,15 @@ describe("MODC fields: packed choices", () => {
       expect(modcType(t)?.fields?.length, `type ${t}`).toBeGreaterThan(0);
   });
 });
+
+describe("output limiter (forge-dsp-firmware#58)", () => {
+  it("reads thresholds, attack and release; without the block it stays null", () => {
+    const s = emptyState();
+    for (const l of [" <.1 system.dsp.limiter=[0,-30,0,0,-240,0,0,-5]", " <.1 system.dsp.limiter.attack=1", " <.1 system.dsp.limiter.release=250"])
+      applyAnswer(s, parseAnswer(l)!);
+    expect(s.limiter).toEqual({ t: [0, -30, 0, 0, -240, 0, 0, -5], attack: 1, release: 250 });
+    const o = emptyState();
+    applyAnswer(o, parseAnswer(" !.1 system.dsp.limiter unknown command")!);
+    expect(o.limiter).toBeNull();
+  });
+});

@@ -83,3 +83,16 @@ test("a restart of the device (system.boot) reconnects to the same state", async
   await expect(page.locator("main pre")).toContainText(/system\.ping/);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
+
+test("output limiter: a threshold set in the mixer reaches the firmware", async ({ page }) => {
+  await start(page);
+  await nav(page, "Mixer");
+  const sel = page.getByLabel(/^Limiter /).first();
+  await expect(sel).toBeVisible();
+  await sel.selectOption("-60");
+  await page.waitForTimeout(500);
+  await nav(page, "Konsole");
+  await page.getByLabel("Befehl").fill("get.1 system.dsp.limiter");
+  await page.getByRole("button", { name: "Senden" }).click();
+  await expect(page.locator("main pre")).toContainText("system.dsp.limiter=[-60,");
+});
