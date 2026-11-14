@@ -120,7 +120,9 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
         let bl = await findBootloader(tr, 0);
         if (!bl) {
           await tr.write("\r\n");                       // end what the probe left in the line buffer
-          if (!(await firmwareAnswers())) bl = await findBootloader(tr, 3000);
+          // still at the fast rate of a page that was closed or reloaded (the Forge falls back to
+          // 38400 only after 30 s without a line): ask there before looking for the bootloader
+          if (!(await firmwareAnswers(1)) && !(await atFastRate(tr))) bl = await findBootloader(tr, 3000);
           if (!bl && !(await firmwareAnswers())) throw new Error(t("app.noForgeAnswers"));
         }
         if (bl) {
@@ -376,13 +378,30 @@ export async function selectDevice(n: number) {
 // --- bootloader (#17) -----------------------------------------------------------------------------
 /** the identity the device reported before it went into the bootloader (not readable there) */
 let lastIdentity = { keyInfo: "", model: "", pcb: "" };
-async function firmwareAnswers(): Promise<boolean> {
-  for (let i = 0; i < 2; i++) {
+async function firmwareAnswers(tries = 2): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
     const r = await client?.get("system.firmware").catch(() => []) ?? [];
     if (r.length) return true;
   }
   return false;
 }
+/** the firmware answers at USB_FAST: stay there (usbFast then has nothing to do); else back to 38400 */
+async function atFastRate(tr: Transport): Promise<boolean> {
+  if (!tr.setBaud || !client) return false;
+  await tr.setBaud(USB_FAST);
+  await tr.write("\r\n");
+  if ((await client.get("system.ping", { timeoutMs: 600 }).catch(() => [])).some((a) => a.kind === "get")) {
+    usbBaud = USB_FAST;
+    client.quietMs = 100;
+    lastTx = Date.now();
+    return true;
+  }
+  await tr.setBaud(38400);
+  return false;
+}
+/** the page goes away (closed, reloaded): ask the Forge back to 38400, as far as the browser lets it */
+if (typeof window !== "undefined") window.addEventListener("pagehide", () => { void usbSlow().catch(() => undefined); });
+
 /** the bootloader on this port: already in contact (400 ms), or waiting at its start (autobaud for burstMs) */
 async function findBootloader(t: Transport, burstMs: number): Promise<Bootloader | null> {
   if (!t.bytes) return null;
