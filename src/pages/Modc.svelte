@@ -1,14 +1,16 @@
 <script lang="ts">
   import { t, tx } from "../lib/i18n/index.svelte";
   import { app, sendModc } from "../lib/app.svelte";
-  import { availableTypes, copyModc, emptyModc, eventOptions, modcName, modcText, modcType, type Modc } from "../lib/device";
+  import { availableTypes, copyModc, DEVICE_TYPES, emptyModc, eventOptions, modcName, modcText, modcType, onDevicePage, type Modc } from "../lib/device";
   import Icon from "../components/Icon.svelte";
   import ModcFields from "../components/ModcFields.svelte";
 
   const d = $derived(app.device);
   const total = $derived(d.identity.modcBlocks || 32);
-  const used = $derived(Object.keys(d.modc).map(Number).filter((n) => d.modc[n].type !== 0).sort((a, b) => a - b));
-  const types = $derived(availableTypes(d));
+  const inUse = $derived(Object.keys(d.modc).map(Number).filter((n) => d.modc[n].type !== 0));
+  // the blocks of the device settings (#26) are set there, in words
+  const used = $derived(inUse.filter((n) => !onDevicePage(d, n)).sort((a, b) => a - b));
+  const types = $derived(availableTypes(d).filter((x) => !DEVICE_TYPES.includes(x.type) && x.type !== 193));
   const events = $derived(eventOptions(total));
   let sel = $state<number | null>(null);
   $effect(() => {
@@ -60,9 +62,11 @@
   <div>
     <h2>{t("common.controlBlocks")}</h2>
     <p class="muted">{t("modc.blocksLinkEventsButtons")}
-      {t("modc.nMUse", { n: used.length, m: total })}</p>
+      {t("modc.nMUse", { n: inUse.length, m: total })}</p>
+    {#if inUse.length > used.length}<p class="muted small">{t("modc.moreOnDevicePage", { n: inUse.length - used.length })}
+      <button class="linkish" onclick={() => (app.page = "device")}>{t("device.title")}</button></p>{/if}
   </div>
-  <button onclick={add} disabled={used.length >= total}>{t("modc.block")}</button>
+  <button onclick={add} disabled={inUse.length >= total || !types.length}>{t("modc.block")}</button>
 </header>
 
 {#if err}<div class="panel alert" role="alert">{t("modc.refusedByDeviceErr", { err })}</div>{/if}
@@ -141,6 +145,7 @@
   .sw.on { background: color-mix(in srgb, var(--ok) 20%, transparent); border-color: var(--ok); color: var(--ok); }
   .del { margin-left: auto; color: var(--muted); }
   .small { font-size: .8rem; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
   .group { display: grid; gap: .45rem; border-top: 1px solid var(--line); padding-top: .7rem; }
   .check { display: inline-flex; align-items: center; gap: .4rem; }
   .check input { accent-color: var(--accent); }

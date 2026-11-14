@@ -33,6 +33,11 @@ describe("firmware from the releases (#10)", () => {
     expect(pick(one, "96ELN", "4.0", true)).toEqual(["forge-dsp-V4x-96ELN-2.5.0.hex"]);
     expect(pick(one, "96ELN", "4.0", null)).toEqual(["forge-dsp-V4x-96ELN-2.5.0.hex"]);
     expect(pick(port, "96ELN", "4.0", false)).toEqual(["forge-dsp-V30-96ELN-2.1.0.hex"]);    // older: still its own file
+    const plain: Release = { ...one, assets: files(["forge-dsp-96LN-2.5.0.hex", "forge-dsp-96ELN-2.5.0.hex", "forge-dsp-96ELN-3-2.5.0.hex"]) };
+    expect(pick(plain, "96ELN", "4.0", false)).toEqual(["forge-dsp-96ELN-2.5.0.hex"]);         // names without V30/V4x
+    expect(pick(plain, "CORED8", "4.1", null)).toEqual(["forge-dsp-96ELN-2.5.0.hex"]);
+    expect(pick(plain, "96ELN3", "4.1", null)).toEqual(["forge-dsp-96ELN-3-2.5.0.hex"]);
+    expect(pick(plain, "96LN", "3.0", null)).toEqual(["forge-dsp-96LN-2.5.0.hex"]);
   });
 
   it("index of the Pages build: newest first, only releases with .hex, no drafts", () => {

@@ -70,7 +70,15 @@ export function variantsFor(model: string, pcb: string, hasClock: boolean | null
   return [];
 }
 
-const variantOf = (file: string) => /^forge-dsp-(V[0-9x]{2}-[0-9A-Z]+(?:-3)?)-/i.exec(file)?.[1] ?? "";
+/** the build of a file: forge-dsp-V4x-96ELN-2.4.1.hex, from 2.5.0 without the board generation
+ * (forge-dsp-96ELN-2.5.0.hex = V4x-96ELN, 96LN = V30-96LN, 96ELN-3 = V4x-96ELN-3, forge-dsp-firmware#69) */
+export function variantOf(file: string): string {
+  const old = /^forge-dsp-(V[0-9x]{2}-[0-9A-Z]+(?:-3)?)-/i.exec(file);
+  if (old) return old[1];
+  const m = /^forge-dsp-(96ELN-3|96ELN|96LN)-\d/i.exec(file);
+  if (!m) return "";
+  return { "96ELN-3": "V4x-96ELN-3", "96ELN": "V4x-96ELN", "96LN": "V30-96LN" }[m[1].toUpperCase()] ?? "";
+}
 
 /** the assets of a release that fit the device, best first */
 export function assetsFor(rel: Release, model: string, pcb: string, hasClock: boolean | null): ReleaseAsset[] {

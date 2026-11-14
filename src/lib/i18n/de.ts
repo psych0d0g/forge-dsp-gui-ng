@@ -1016,6 +1016,7 @@ export const DE = {
   "device.capDebounce": "entprellen",
   "device.capHold": "Endstufen an",
   "firmware.runsBothBoards": "Die Datei läuft auf dem 96ELN mit PCB 3.0 und 4.x (gemeinsamer Build).",
+  "modc.moreOnDevicePage": "{n} weitere (Ein-/Ausschalten, Takt, S/PDIF, D/A-Wandler) stehen auf der Seite",
 } as const;
 
 export type Key = keyof typeof DE;

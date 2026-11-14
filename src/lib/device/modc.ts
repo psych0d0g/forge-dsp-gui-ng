@@ -183,6 +183,16 @@ export function deviceHasChip(s: DeviceState, type: number): boolean {
   return true;
 }
 
+/** types the page of the device settings shows in words (#26): main clock, S/PDIF, ES9038PRO */
+export const DEVICE_TYPES = [68, 69, 79];
+
+/** block n is on the page of the device settings: the last one (on/off) and the hardware blocks
+ * of chips the device has; the page of the control blocks leaves them out */
+export function onDevicePage(s: DeviceState, n: number): boolean {
+  const total = s.identity.modcBlocks || 32, m = s.modc[n];
+  return n === total || (!!m && DEVICE_TYPES.includes(m.type) && deviceHasChip(s, m.type));
+}
+
 /** types this device can run (the firmware reports a version per type, 0 = not available) */
 export function availableTypes(s: DeviceState): ModcType[] {
   const known = s.modcVersions.length > 0;

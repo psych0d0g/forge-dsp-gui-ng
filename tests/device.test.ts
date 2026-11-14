@@ -3,7 +3,7 @@ import v30 from "./fixtures/V30-96LN.json";
 import { describe, expect, it } from "vitest";
 import { ForgeClient, parseAnswer, parseValue } from "../src/lib/protocol";
 import type { Transport } from "../src/lib/transport/types";
-import { deviceHasChip, modcWrites, vuSum } from "../src/lib/device";
+import { deviceHasChip, modcWrites, onDevicePage, vuSum } from "../src/lib/device";
 import { alignFromDistances, applyAnswer, inputDelayGroup, limitsOf, bytesHex, cmToSamples, dbToRaw, delayGroups, delayMax, emptyState, exportState,
   hexBytes, isPort, modcTypeVersion, parseKeyInfo, rawToDb, readDevice, samplesToCm, samplesToMs } from "../src/lib/device";
 
@@ -540,5 +540,17 @@ describe("blocks about a chip only with the chip (#26)", () => {
     expect(deviceHasChip(dev("96ELN", 2173), 79)).toBe(false);
     expect(deviceHasChip(dev("96ELN3", 0x87d), 79)).toBe(true);
     expect(deviceHasChip(dev("96ELN3", 0x879), 79)).toBe(false);
+  });
+});
+
+describe("blocks of the device settings are not on the page of the control blocks (#26)", () => {
+  it("the last block and the hardware blocks of chips the device has", () => {
+    const s = emptyState();
+    s.identity.model = "96ELN";
+    s.identity.modcBlocks = 32;
+    s.features.hw = [110, 96, 63, 63, 2173, 2173];
+    const b = (type: number) => ({ enable: 1, type, flags: [0, 0, 0, 0], events: [0, 0, 0, 0], sets: [0, 0, 0, 0] });
+    s.modc = { 1: b(16), 9: b(68), 10: b(69), 11: b(79), 32: b(193) };
+    expect([1, 9, 10, 11, 32].filter((n) => onDevicePage(s, n))).toEqual([9, 10, 32]);   // no ES9038PRO on a 96ELN
   });
 });

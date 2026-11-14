@@ -1016,4 +1016,5 @@ export const EN: Record<Key, string> = {
   "device.capDebounce": "debounce",
   "device.capHold": "amplifiers on",
   "firmware.runsBothBoards": "The file runs on the 96ELN with PCB 3.0 and 4.x (shared build).",
+  "modc.moreOnDevicePage": "{n} more (switching on/off, clock, S/PDIF, D/A converter) are on the page",
 };

@@ -11,7 +11,7 @@
   import { APP_SIZE, imageKnows, runsPcb30 } from "../lib/boot/client";
   import { HexError, parseHex } from "../lib/boot/ihex";
   import { runUpdate, STEP_LABEL, UpdateError, type Step } from "../lib/boot/update";
-  import { assetsFor, fetchAsset, loadReleases, type Release } from "../lib/boot/releases";
+  import { assetsFor, fetchAsset, loadReleases, variantOf, type Release } from "../lib/boot/releases";
 
   const d = $derived(app.device);
   const id = $derived(d.identity);
@@ -129,7 +129,8 @@
       ? ["ok", t("firmware.imageKnowsDeviceId", { id: `${id.model}-${id.pcb}` })]
       : ["warn", t("firmware.modelModelPCBPcb", { model: id.model, pcb: id.pcb })]);
     else if (boot) c.push(["warn", t("firmware.modelUnknownNoKnown")]);
-    const v30 = /V30/i.test(file.name), v4x = /V4[x01]/i.test(file.name);
+    const variant = variantOf(file.name) || file.name;
+    const v30 = /V30-96ELN/i.test(variant), v4x = /V4[x01]-96ELN(?!-3)/i.test(variant);
     if (v4x && id.model === "96ELN" && runsPcb30(file.image))   // forge-dsp-firmware#69: one build for PCB 3.0 and 4.x
       c.push(["ok", t("firmware.runsBothBoards")]);
     else if (clock !== null && (v30 || v4x)) c.push(v30 === !clock
