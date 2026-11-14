@@ -61,6 +61,11 @@ export class SimTarget implements ByteLink {
         this.page = [];
       }
       this.answer([ok]);
+    } else if (cmd === CMD.EEPROM_WRITE) {
+      const data = p.subarray(1, 1 + Math.max(0, this.eeprom.length - this.addr));
+      this.eeprom.set(data, this.addr);
+      this.addr += data.length;
+      this.answer([ok]);
     } else if (cmd === CMD.FLASH_READ || cmd === CMD.EEPROM_READ) {
       const mem = cmd === CMD.FLASH_READ ? this.flash : this.eeprom;
       const data = mem.subarray(this.addr, Math.min(mem.length, this.addr + p[1]));

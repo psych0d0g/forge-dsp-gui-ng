@@ -53,8 +53,10 @@ describe("bootloader client against the simulated target", () => {
     expect(t.flash[5119]).toBe(0xff);
     expect(t.flash[5120]).toBe(0xff);                       // nothing behind the image was touched
     expect(t.boot.every((b) => b === 0xb0)).toBe(true);
+    t.eeprom.set([0xaa, 0x55, 0x12], 0);                    // the magic of system.boot
     await bl.startApplication();
     expect(t.started).toBe(true);
+    expect([...t.eeprom.subarray(0, 3)]).toEqual([0xff, 0xff, 0x12]);   // cleared (forge-dsp-firmware#67), the rest kept
   });
 
   it("reads the EEPROM to its end", async () => {

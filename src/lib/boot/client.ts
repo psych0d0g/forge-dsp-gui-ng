@@ -102,7 +102,16 @@ export class Bootloader {
     return this.retry([CMD.SET_ADDRESS, (a >>> 24) & 0xff, (a >>> 16) & 0xff, (a >>> 8) & 0xff, a & 0xff]);
   }
 
+  /**
+   * Starts the firmware. Before that EEPROM 0/1 (AA 55 from system.boot) go back to FF FF: the
+   * bootloader clears them only when it times out, so after an update every power-on waited 58.6 s
+   * in the bootloader (forge-dsp-firmware#67). Best effort: port firmware from 2.4 clears it too.
+   */
   async startApplication() {
+    try {
+      await this.setAddress(0);
+      await this.transact([CMD.EEPROM_WRITE, 0xff, 0xff]);
+    } catch { /* the firmware clears it on its start */ }
     await this.transact([CMD.START_APPLICATION]);
   }
 
