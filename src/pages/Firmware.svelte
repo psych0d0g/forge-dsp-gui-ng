@@ -30,7 +30,7 @@
   let understood = $state(false);
   let running = $state(false);
   let steps = $state<{ step: Step; done?: number; total?: number }[]>([]);
-  let result = $state<{ ok: boolean; text: string; touched?: boolean } | null>(null);
+  let result = $state<{ ok: boolean; text: string; touched?: boolean; complete?: boolean } | null>(null);
   /** the backup of this update, kept until the page is left (offered as buttons as well) */
   let saved = $state<{ flash: Uint8Array; eeprom: Uint8Array; flashName: string; eepromName: string } | null>(null);
   let sdNote = $state("");
@@ -220,7 +220,7 @@
       await usbFast();
     } catch (e) {
       const u = e instanceof UpdateError ? e : null;
-      result = { ok: false, text: u ? `${tx(STEP_LABEL[u.step])}: ${explain(u.message)}` : explain(e), touched: u?.flashTouched };
+      result = { ok: false, text: u ? `${tx(STEP_LABEL[u.step])}: ${explain(u.message)}` : explain(e), touched: u?.flashTouched, complete: u?.complete };
     } finally {
       flow = null;
       running = false; app.exclusive = false;
@@ -360,7 +360,9 @@
     {#if result}
       <div class="result" class:ok={result.ok} class:bad={!result.ok} role="status">
         <p>{result.text}</p>
-        {#if result.touched}
+        {#if result.complete}
+          <p>{t("firmware.completeButStep")}</p>
+        {:else if result.touched}
           <p>{t("firmware.oldFirmwareNoLonger")}</p>
         {:else if !result.ok}
           <p>{t("firmware.nothingWasChangedDevice")}</p>

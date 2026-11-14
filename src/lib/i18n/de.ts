@@ -351,6 +351,8 @@ export const DE = {
   "filters.addEQBandGets": "EQ-Band hinzufügen (holt weitere Plätze, Neustart)",
   "filters.band": "Band",
   // firmware
+  "firmware.identityNoAnswer": "Die neue Firmware meldet ihre Kennung auch nach 3 Minuten nicht.",
+  "firmware.completeButStep": "Die neue Firmware ist vollständig geschrieben und geprüft, die Abstimmung ist erhalten. Der erste Start kann etwas dauern; danach neu verbinden und die Gerätekennung in der Übersicht prüfen.",
   "firmware.onlyFirstDevice": "Das Update geht nur für Gerät 1, den Forge am USB-Anschluss: Der Bootloader ist über die RS485-Kette nicht erreichbar.",
   "firmware.noAnswerFromBootloader": "keine Antwort vom Bootloader",
   "firmware.bootloaderReportsTransmissionError": "Bootloader meldet Übertragungsfehler",

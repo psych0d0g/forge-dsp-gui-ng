@@ -351,6 +351,8 @@ export const EN: Record<Key, string> = {
   "filters.addEQBandGets": "Add EQ band (gets more slots, restart)",
   "filters.band": "Band",
   // firmware
+  "firmware.identityNoAnswer": "The new firmware does not report its identity even after 3 minutes.",
+  "firmware.completeButStep": "The new firmware is completely written and verified, the tuning is kept. The first start may take a while; then connect again and check the device identity on the Overview page.",
   "firmware.onlyFirstDevice": "The update works only for device 1, the Forge on the USB port: the bootloader cannot be reached through the RS485 chain.",
   "firmware.noAnswerFromBootloader": "no answer from the bootloader",
   "firmware.bootloaderReportsTransmissionError": "bootloader reports a transmission error",

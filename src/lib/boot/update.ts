@@ -31,17 +31,21 @@ export interface UpdateOptions {
   identity: string;
   connectMs?: number;
   startMs?: number;
+  /** how long the new firmware may take until it reports its identity (the first start after an
+   *  update writes the DSP programs into their EEPROMs and checks them) */
+  identityMs?: number;
 }
 
 export class UpdateError extends Error {
-  /** true once the flash was touched: the old firmware is gone, the bootloader remains */
-  constructor(message: string, public step: Step, public flashTouched: boolean) { super(message); }
+  /** flashTouched: the old firmware is gone, the bootloader remains; complete: the new one is written
+   *  and verified (an error after that leaves a working device) */
+  constructor(message: string, public step: Step, public flashTouched: boolean, public complete = false) { super(message); }
 }
 
 export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootloader: string; written: number }> {
   const sleep = io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const bl = new Bootloader(io.link);
-  let step: Step = "enter", touched = false;
+  let step: Step = "enter", touched = false, complete = false;
   const at = (s: Step, done?: number, total?: number) => { step = s; io.onStep(s, done, total); };
   try {
     at("enter");
@@ -76,6 +80,7 @@ export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootl
     if (back.length !== n || back.some((b, i) => b !== want[i]))
       throw new Error(t("firmware.whatWasReadBack"));
 
+    complete = true;
     at("start");
     await bl.startApplication();
     const end = Date.now() + (o.startMs ?? 90000);
@@ -88,22 +93,25 @@ export async function runUpdate(io: UpdateIo, o: UpdateOptions): Promise<{ bootl
 
     at("identity");
     if (o.identity) {
+      const want = `-${o.identity}-`, limit = o.identityMs ?? 180000;
       let key = "";
-      for (let i = 0; i < 20 && !key; i++) {       // ping answers before the start has finished
+      // ping answers early; the identity only once the start (DSP programs, preset) is through
+      for (let waited = 0; !key && waited < limit; waited += 1000) {
         key = await io.ask("system.key.info");
         if (!key) await sleep(1000);
       }
-      if (!key.includes(`-${o.identity}-`)) {
+      if (!key) throw new Error(t("firmware.identityNoAnswer"));
+      for (let i = 0; i < 5 && !key.includes(want); i++) {
         await io.sendLine(`set.1 system.key.info="${o.identity}"`);
-        await sleep(500);
-        if (!(await io.ask("system.key.info")).includes(`-${o.identity}-`))
-          throw new Error(t("firmware.identityIdCouldNot", { id: o.identity }));
+        await sleep(1500);
+        key = (await io.ask("system.key.info")) || key;
       }
+      if (!key.includes(want)) throw new Error(t("firmware.identityIdCouldNot", { id: o.identity }));
     }
     return { bootloader: `${v[0]}.${v[1]}`, written: n };
   } catch (e) {
     if (e instanceof UpdateError) throw e;
     const msg = e instanceof NoAnswer ? t("firmware.bootloaderNoLongerAnswers") : e instanceof Error ? e.message : String(e);
-    throw new UpdateError(msg, step, touched);
+    throw new UpdateError(msg, step, touched, complete);
   }
 }

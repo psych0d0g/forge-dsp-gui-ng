@@ -109,7 +109,8 @@ import { runUpdate, UpdateError, type Step } from "../src/lib/boot/update";
 
 describe("update sequence", () => {
   const image = Uint8Array.from({ length: 3000 }, (_, i) => (i * 5 + 1) & 0xff);
-  function rig(t: SimTarget, opts: { identityAfter?: string; knowsKeySet?: boolean } = {}) {
+  function rig(t: SimTarget, opts: { identityAfter?: string; knowsKeySet?: boolean; keyLate?: number } = {}) {
+    let late = opts.keyLate ?? 0;
     const lines: string[] = [], steps: Step[] = [];
     let key = opts.identityAfter ?? "96ELN-4.0";
     let backup: [number, number] | null = null;
@@ -121,7 +122,8 @@ describe("update sequence", () => {
         if (m && opts.knowsKeySet !== false) key = m[1];
         await t.write(new TextEncoder().encode(l + "\r\n"));   // text also reaches the port
       },
-      ask: async (reg: string) => (!t.started ? "" : reg === "system.ping" ? '"pong"' : `"BNS-${key}-SERIAL-CC-1-MDD"`),
+      ask: async (reg: string) => (!t.started ? "" : reg === "system.ping" ? '"pong"'
+        : late-- > 0 ? "" : `"BNS-${key}-SERIAL-CC-1-MDD"`),   // keyLate: the first start takes its time
       onStep: (s: Step) => { if (steps.at(-1) !== s) steps.push(s); },
       onBackup: (f: Uint8Array, e: Uint8Array) => { backup = [f.length, e.length]; },
       sleep: async () => {},
@@ -140,6 +142,20 @@ describe("update sequence", () => {
     expect(r.lines).toEqual(["", "set.1 system.boot=1"]);
     expect([...t.flash.subarray(0, 3000)]).toEqual([...image]);
     expect(t.started).toBe(true);
+  });
+
+  it("waits for the identity of a slow first start; an error after the verify says the firmware is complete", async () => {
+    const t = new SimTarget();
+    const r = rig(t, { keyLate: 60 });                       // 60 s without the identity: more than the old 20
+    await runUpdate(r.io, { image, backup: false, identity: "96ELN-4.0", connectMs: 2000, startMs: 500 });
+    expect(r.steps.at(-1)).toBe("identity");
+    const t2 = new SimTarget();
+    const r2 = rig(t2, { identityAfter: "96ELN-4.0", knowsKeySet: false });
+    const e = await runUpdate(r2.io, { image, backup: false, identity: "CORED8-4.1", connectMs: 2000, startMs: 500 }).catch((x) => x);
+    expect(e).toBeInstanceOf(UpdateError);
+    expect(e.step).toBe("identity");
+    expect(e.complete).toBe(true);                           // the new firmware is written and runs
+    expect(r2.lines.filter((l) => l.startsWith("set.1 system.key.info")).length).toBe(5);
   });
 
   it("sets the identity again when the new firmware reports another", async () => {
