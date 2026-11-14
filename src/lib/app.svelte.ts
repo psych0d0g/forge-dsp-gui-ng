@@ -12,7 +12,7 @@ import { openWebSocket } from "./transport/websocket";
 import { t } from "./i18n/index.svelte";
 import { history, historyAttach, historyReset, historyTouch, redo, undo, type HistoryIo } from "./history.svelte";
 import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, parseKeyInfo, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
-  type SdLink } from "./device";
+  type SdLink, modcWrites, type Modc } from "./device";
 import { DemoTransport, demoPreset, demoState } from "./device/demo";
 import { stateToEntries, toCfg, type Entry } from "./device/tuning";
 import { saveFile } from "./saveFile";
@@ -31,7 +31,7 @@ export interface BootState {
   identity: string;
 }
 
-export type PageId = "overview" | "mixer" | "filters" | "delay" | "modc" | "presets" | "biquads"
+export type PageId = "overview" | "device" | "mixer" | "filters" | "delay" | "modc" | "presets" | "biquads"
   | "diagnose" | "firmware" | "console" | "sdcard" | "settings";
 
 export const app = $state({
@@ -673,6 +673,15 @@ export async function sendRaw(line: string) {
   } catch (e) {
     app.error = explain(e);
   }
+}
+
+/** block n of the control blocks after a change from `before` (see modcWrites); "" = ok */
+export async function sendModc(n: number, before: Modc): Promise<string> {
+  const total = app.device.identity.modcBlocks || 32;
+  let err = "";
+  for (const [reg, text] of modcWrites(n, total, before, app.device.modc[n])) err = (await writeRaw(reg, text)) || err;
+  if (n !== total) historyTouch();
+  return err;
 }
 
 /** one set with the value text of a tuning file; returns the error text or "" */

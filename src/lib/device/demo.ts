@@ -71,6 +71,7 @@ export function demoState(n = 1): DeviceState {
   s.startup = [247, 486, 486, 492, 1198, 2134, 3030, 3926, 4934, 4936, 5209, 7180, 7181, 7183, 7227, 7406, 7543, 8470, 8470, 9576, 0];
   s.uptime = { ms: 3723000, at: Date.now() };
   s.clickless = 1;
+  s.shutdownHold = 5000;
   s.supply = [3320, 13800];
   s.temperature = 38.5;
   s.vu = [0, 0, 0, 0, 0, 0, 215, 213];

@@ -3,7 +3,7 @@ import v30 from "./fixtures/V30-96LN.json";
 import { describe, expect, it } from "vitest";
 import { ForgeClient, parseAnswer, parseValue } from "../src/lib/protocol";
 import type { Transport } from "../src/lib/transport/types";
-import { vuSum } from "../src/lib/device";
+import { deviceHasChip, modcWrites, vuSum } from "../src/lib/device";
 import { alignFromDistances, applyAnswer, inputDelayGroup, limitsOf, bytesHex, cmToSamples, dbToRaw, delayGroups, delayMax, emptyState, exportState,
   hexBytes, isPort, modcTypeVersion, parseKeyInfo, rawToDb, readDevice, samplesToCm, samplesToMs } from "../src/lib/device";
 
@@ -508,5 +508,37 @@ describe("only the biquads in use (forge-dsp-firmware#64)", () => {
     expect(s.biquads[3][2]).toEqual({ type: 1, f: 1000, gain: 30, q: 707, b: 0, flags: 128 });
     expect(s.biquads[3][1].type).toBe(0);
     expect(Object.keys(s.biquads[35])).toEqual(["1", "2"]);
+  });
+});
+
+describe("writes of a control block (#26)", () => {
+  const blk = (sets: number[], events = [4, 0, 6, 128]) => ({ enable: 1, type: 193, flags: [0, 0, 0, 0], events, sets });
+  it("the last block is fixed: only the changed parts, one by one", () => {
+    expect(modcWrites(32, 32, blk([4, 5, 4, 4]), blk([0, 5, 4, 8]))).toEqual([["modc.32.sets.1", "0"], ["modc.32.sets.4", "8"]]);
+    expect(modcWrites(32, 32, blk([4, 5, 4, 4]), blk([4, 5, 4, 4], [4, 0, 7, 128]))).toEqual([["modc.32.events.3", "7"]]);
+    expect(modcWrites(32, 32, blk([4, 5, 4, 4]), blk([4, 5, 4, 4]))).toEqual([]);
+  });
+  it("other blocks whole", () => {
+    expect(modcWrites(7, 32, blk([4, 5, 4, 4]), blk([0, 5, 4, 4]))).toEqual([["modc.7", "[1,193,00000000,4,0,6,128,00050404]"]]);
+  });
+});
+
+describe("blocks about a chip only with the chip (#26)", () => {
+  const dev = (model: string, other?: number) => {
+    const s = emptyState();
+    s.identity.model = model;
+    if (other !== undefined) s.features.hw = [110, 96, 63, 63, other, other];
+    return s;
+  };
+  it("S/PDIF receiver CT7302: all but the 96LN, when found", () => {
+    expect(deviceHasChip(dev("96ELN", 2173), 69)).toBe(true);    // DEV Forge, PCB 4.0
+    expect(deviceHasChip(dev("96ELN", 0x807), 69)).toBe(false);  // receiver not found
+    expect(deviceHasChip(dev("96LN"), 69)).toBe(false);
+    expect(deviceHasChip(dev("CORED8"), 69)).toBe(true);         // no report: the model decides
+  });
+  it("ES9038PRO: only the 96ELN-3", () => {
+    expect(deviceHasChip(dev("96ELN", 2173), 79)).toBe(false);
+    expect(deviceHasChip(dev("96ELN3", 0x87d), 79)).toBe(true);
+    expect(deviceHasChip(dev("96ELN3", 0x879), 79)).toBe(false);
   });
 });

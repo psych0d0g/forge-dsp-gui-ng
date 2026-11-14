@@ -2,7 +2,7 @@
 import { expect, test } from "@playwright/test";
 
 const PAGES = ["Übersicht", "Mixer", "Filter & EQ", "Laufzeit", "Steuerblöcke", "Presets", "Biquad-Verteilung", "Diagnose",
-  "Speicherkarte", "Firmware", "Einstellungen", "Konsole"];
+  "Speicherkarte", "Firmware", "Geräteeinstellungen", "Einstellungen", "Konsole"];
 
 test("no page scrolls sideways", async ({ page, isMobile }) => {
   await page.goto("./?sim=V40-96ELN");

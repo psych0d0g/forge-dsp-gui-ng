@@ -155,6 +155,34 @@ export const modcText = (m: Modc) =>
   `[${m.enable},${m.type},${m.flags.map(hx).join("")},${m.events.join(",")},${m.sets.map(hx).join("")}]`;
 const hx = (b: number) => (b & 0xff).toString(16).toUpperCase().padStart(2, "0");
 
+/**
+ * The writes that take block n from `before` to `after`. The last block (the start-up and shutdown
+ * delays) is fixed in the firmware: modc.N=[…] is refused there, only its events, flags and sets can
+ * be written one by one (modc.N.sets.K). The other blocks are written whole.
+ */
+export function modcWrites(n: number, total: number, before: Modc, after: Modc): [string, string][] {
+  if (n !== total) return modcText(before) === modcText(after) ? [] : [[`modc.${n}`, modcText(after)]];
+  const out: [string, string][] = [];
+  for (const of of ["events", "flags", "sets"] as const)
+    after[of].forEach((v, i) => { if (v !== before[of][i]) out.push([`modc.${n}.${of}.${i + 1}`, String(v & 0xff)]); });
+  return out;
+}
+export const copyModc = (m: Modc): Modc => ({ ...m, flags: [...m.flags], events: [...m.events], sets: [...m.sets] });
+
+/**
+ * Blocks about a chip only make sense when the device has it (#26). The firmware reports the chips it
+ * found in system.feature.attributes.hw = [.., found other]; the bits depend on the build:
+ * CT7302 (S/PDIF receiver) on bits 3/4 in every build but the 96LN, ES90x8PRO on bit 2 only in the
+ * 96ELN-3 build (forge-dsp-firmware flavour.h). Without the report the model decides alone.
+ */
+export function deviceHasChip(s: DeviceState, type: number): boolean {
+  const hw = s.features.hw, other = Array.isArray(hw) && typeof hw[5] === "number" ? hw[5] : null;
+  const found = (mask: number) => other === null || (other & mask) !== 0;
+  if (type === 69) return s.identity.model !== "96LN" && found(0x18);
+  if (type === 79) return s.identity.model === "96ELN3" && found(0x04);
+  return true;
+}
+
 /** types this device can run (the firmware reports a version per type, 0 = not available) */
 export function availableTypes(s: DeviceState): ModcType[] {
   const known = s.modcVersions.length > 0;

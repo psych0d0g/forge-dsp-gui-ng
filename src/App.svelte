@@ -16,6 +16,7 @@
   import Diagnose from "./pages/Diagnose.svelte";
   import Presets from "./pages/Presets.svelte";
   import ModcPage from "./pages/Modc.svelte";
+  import DevicePage from "./pages/Device.svelte";
   import Firmware from "./pages/Firmware.svelte";
   import Biquads from "./pages/Biquads.svelte";
   import SdCard from "./pages/SdCard.svelte";
@@ -36,7 +37,8 @@
     { group: tk("app.control"), items: [{ id: "modc", label: tk("common.controlBlocks") }, { id: "presets", label: tk("common.presets") },
       { id: "biquads", label: tk("common.biquadAllocation") }] },
     { group: tk("app.tools"), items: [
-      { id: "diagnose", label: tk("common.diagnostics") }, { id: "sdcard", label: tk("common.memoryCard") }, { id: "firmware", label: tk("common.firmware") }, { id: "settings", label: tk("common.settings") },
+      { id: "diagnose", label: tk("common.diagnostics") }, { id: "sdcard", label: tk("common.memoryCard") }, { id: "firmware", label: tk("common.firmware") },
+      { id: "device", label: tk("device.title") }, { id: "settings", label: tk("common.settings") },
       { id: "console", label: tk("common.console") }] },
   ];
 
@@ -214,6 +216,7 @@
     {:else if app.page === "diagnose"}<Diagnose />
     {:else if app.page === "presets"}<Presets />
     {:else if app.page === "modc"}<ModcPage />
+    {:else if app.page === "device"}<DevicePage />
     {:else if app.page === "biquads"}<Biquads />
     {:else if app.page === "sdcard"}<SdCard />
     {:else if app.page === "settings"}<Settings />

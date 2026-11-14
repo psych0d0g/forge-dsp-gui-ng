@@ -145,6 +145,15 @@
 "get.1 system.supply": [
 "<.1 system.supply=[0,-1]"
 ],
+"get.1 system.startup.time": [
+"<.1 system.startup.time=[-1,-1,1,-1,-1,-1,-1,-1,-1,1,-1,-1,1,1,-1,-1,-1,1,1,1,0]"
+],
+"get.1 system.uptime": [
+"<.1 system.uptime=[0,0]"
+],
+"get.1 system.shutdown.hold": [
+"<.1 system.shutdown.hold=5000"
+],
 "get.1 modc.version.attributes": [
 "<.1 modc.version.attributes=[\"aa\",\"ab\",\"ac\",\"ad\"]"
 ],

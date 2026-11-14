@@ -24,7 +24,7 @@ GETS = ["system.key.info", "system.firmware", "system.firmware.port", "system.in
         "system.gui.panes.bq", "system.gui.panes.ou", "system.gui.panes.sy", "gain.out.scale", "gain.in.scale",
         "gain.spdif.scale", "mixer.scale", "gain.out", "gain.in", "gain.spdif", "mute.out", "phase.out", "delay",
         "delay.in", "mixer.position", "mixer.in", "mixer.in.max", "preset.loaded", "preset.select",
-        "system.channel.name.*", "system.channel.in.*", "system.errors", "system.temperature.celsius", "biquad.clickless", "system.supply",
+        "system.channel.name.*", "system.channel.in.*", "system.errors", "system.temperature.celsius", "biquad.clickless", "system.supply", "system.startup.time", "system.uptime", "system.shutdown.hold",
         "modc.version.attributes", "modc.version.attributes.aa", "modc.version.attributes.ab",
         "modc.version.attributes.ac", "modc.version.attributes.ad", "modc.*", "mixer.*", "biquad.*"]
 

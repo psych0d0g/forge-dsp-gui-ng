@@ -105,6 +105,8 @@ export interface DeviceState {
   startup: number[] | null;
   /** ms since power-on as read (system.uptime) and when it was read (Date.now()); null = none */
   uptime: { ms: number; at: number } | null;
+  /** ms remote out stays on after ACC off, outputs muted (system.shutdown.hold, forge-dsp-firmware#68); null = none */
+  shutdownHold: number | null;
 }
 
 export function emptyState(): DeviceState {
@@ -137,6 +139,7 @@ export function emptyState(): DeviceState {
     temperature: null,
     startup: null,
     uptime: null,
+    shutdownHold: null,
   };
 }
 
@@ -242,6 +245,9 @@ export function applyAnswer(s: DeviceState, a: Answer): boolean {
           return false;
         case "supply":
           if (p.length === 2) { s.supply = v; return true; }
+          return false;
+        case "shutdown":
+          if (p.length === 3 && p[2] === "hold") { s.shutdownHold = num(v); return true; }
           return false;
         case "startup":
           if (p.length === 3 && p[2] === "time") { s.startup = nums(v); return true; }
