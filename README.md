@@ -12,7 +12,7 @@ Die Firmware des Forge (Original BASCOM 1.11.6000 oder der C-Port [forge-dsp-fir
 
 **Stand:** Release 1.1.0. Seiten: Übersicht mit Pegeln aller Ein- und Ausgänge, Startzeiten und Laufzeit (Port-Firmware ab 2.4.1), Mixer als Mischpult (Kanalzüge, Routing,
 Ausgangsbank, Profile, „All Over“), Filter & EQ (Frequenz- und Phasengang, Weichenansicht mit elektrischer Summe,
-Kanal kopieren, Filter aus REW übernehmen), Laufzeit, Steuerblöcke, Geräteeinstellungen (Ein-/Ausschalten als Ablauf, Clickless, Haupttakt, S/PDIF, ES9038PRO in Worten; nur, was das Gerät hat), Presets mit Abstimmungsdateien im `.cfg`-Format der Original-GUI und Vergleich
+Kanal kopieren, Filter aus REW übernehmen, Weichen-Assistent), Laufzeit, Steuerblöcke, Geräteeinstellungen (Ein-/Ausschalten als Ablauf, Clickless, Haupttakt, S/PDIF, ES9038PRO in Worten; nur, was das Gerät hat), Presets mit Abstimmungsdateien im `.cfg`-Format der Original-GUI und Vergleich
 (zwei Presets oder Gerät gegen Datei, Unterschiede in Worten), Biquad-Verteilung, Diagnose mit Log der Speicherkarte, Speicherkarte, Firmware-Update im Browser (auch direkt aus den
 Firmware-Releases), Einstellungen, Konsole. In der Kopfzeile Ausgangspegel, Master-Lautstärke und Rückgängig/Wiederholen; Tastenkürzel nach dem ETON Control
 Center (Übersicht mit `?`). Viele Funktionen

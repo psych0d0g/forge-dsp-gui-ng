@@ -5,7 +5,7 @@
   import type { Biquad } from "../lib/device";
   import { chainResponse, coeffs, isActive, logFreqs, sumResponse, typeInfo, type SumPart } from "../lib/dsp/biquad";
 
-  let { filters, rate, freq, view, overlays = [], sum = null, gainRange, selected, showPhase, onselect, onmove, onq }: {
+  let { filters, rate, freq, view, overlays = [], sum = null, gainRange, selected, showPhase, onselect, onmove, onq, showTotal = true }: {
     filters: { n: number; bq: Biquad; label?: string | number }[]; rate: number; freq: [number, number];
     /** range of the frequency axis (a section of `freq`); the handles still move within `freq` */
     view?: [number, number];
@@ -16,6 +16,8 @@
     gainRange: [number, number];
     selected: number | null; showPhase: boolean; onselect: (n: number) => void;
     onmove: (n: number, f: number, gainTenths: number | null) => void; onq: (n: number, factor: number) => void;
+    /** the curve of `filters` (off when only overlays and the sum are shown, e.g. the crossover wizard) */
+    showTotal?: boolean;
   } = $props();
 
   const W = 1000, H = 270, L = 44, R = 44, T = 12, B = 26;
@@ -95,7 +97,7 @@
     {#if showPhase}<path class="other ph" style="stroke:{o.color}" d={o.curve.phase.map((p, i) => `${i === 0 || Math.abs(p - o.curve.phase[i - 1]) > 180 ? "M" : "L"}${x(freqs[i]).toFixed(1)} ${yPhase(p).toFixed(1)}`).join("")} />{/if}
   {/each}
   {#if area}<path class="single" d={area} />{/if}
-  <path class="total" d={line(total.db, y)} />
+  {#if showTotal}<path class="total" d={line(total.db, y)} />{/if}
   {#if sumCurve}<path class="sum" d={line(sumCurve.db, y)}><title>{t("ui.sumElectricalLevelPolarity")}</title></path>{/if}
   {#each active.filter((f) => f.bq.f >= lo && f.bq.f <= hi) as f}
     <g class="handle" class:sel={f.n === selected} transform="translate({x(f.bq.f)} {y(handleDb(f.bq))})">

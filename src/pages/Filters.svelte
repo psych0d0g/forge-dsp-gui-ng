@@ -11,6 +11,7 @@
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
   import Knob from "../components/Knob.svelte";
+  import CrossoverWizard from "../components/CrossoverWizard.svelte";
 
   const d = $derived(app.device);
   const lim = $derived(limitsOf(d));
@@ -123,6 +124,7 @@
   }
 
   // filters from REW (#23): into this channel only, the partner is not changed
+  let xoverOpen = $state(false);   // crossover wizard (#25)
   let rewOpen = $state(false);
   let rewText = $state("");
   let rewReplace = $state(true);
@@ -373,6 +375,9 @@
     {/if}
     <button class="ghost copybtn" aria-expanded={rewOpen} onclick={() => { rewOpen = !rewOpen; copyNote = ""; }}
       title={t("rew.title")}>{t("rew.button")}</button>
+    {#if d.gain.out.length >= 4}
+      <button class="ghost copybtn" onclick={() => { xoverOpen = true; copyNote = ""; }}>{t("xover.button")}</button>
+    {/if}
   </div>
   {#if rewOpen}
     <div class="rew" role="group" aria-label={t("rew.title")}>
@@ -485,6 +490,10 @@
 </section>
 
 {#if poolBusy}<p class="poolbusy">{poolBusy}</p>{/if}
+
+{#if xoverOpen}
+  <CrossoverWizard onclose={() => (xoverOpen = false)} ondone={(n) => { xoverOpen = false; copyNote = n; resort(); }} />
+{/if}
 
 <style>
   .poolbusy { color: var(--accent); font-size: .85rem; margin: .5rem 0; }
