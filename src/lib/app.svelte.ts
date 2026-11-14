@@ -160,6 +160,24 @@ export async function disconnect() {
   app.device = emptyState();
 }
 
+/** everything read again without the reading screen (the page stays, e.g. after a preset change) */
+async function reloadQuiet() {
+  const c = client;
+  if (!c || app.demo) return;
+  const ex = app.exclusive;
+  app.exclusive = true;   // no status reads in between
+  try {
+    const d = await readDevice(c);
+    if (client !== c) return;
+    app.device = d;
+    await readMaster();
+    loadInNames();
+    historyReset(app.device);
+  } finally {
+    app.exclusive = ex;
+  }
+}
+
 export async function reload() {
   if (!client || app.demo) return;
   app.bootloader = null;   // a firmware runs again (after an update)
@@ -178,7 +196,7 @@ export async function reload() {
 let presetWait: (() => void) | null = null;
 function presetLoaded() {
   if (presetWait) { presetWait(); return; }
-  if (app.status === "online" && !app.exclusive && !app.demo) void reload().catch((e) => (app.error = explain(e)));
+  if (app.status === "online" && !app.exclusive && !app.demo) void reloadQuiet().catch((e) => (app.error = explain(e)));
 }
 /** load preset n (0-based): no status reads meanwhile (the Forge does not answer while loading) */
 export async function loadPreset(n: number): Promise<string> {
@@ -193,7 +211,7 @@ export async function loadPreset(n: number): Promise<string> {
     presetWait = null;
     app.exclusive = false;
   }
-  if (!app.demo) await reload();
+  if (!app.demo) await reloadQuiet();
   return "";
 }
 
