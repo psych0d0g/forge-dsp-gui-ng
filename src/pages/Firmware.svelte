@@ -8,7 +8,7 @@
   import { isNative } from "../lib/native";
   import { openWebSerial } from "../lib/transport/webserial";
   import type { Transport } from "../lib/transport/types";
-  import { APP_SIZE, imageKnows } from "../lib/boot/client";
+  import { APP_SIZE, imageKnows, runsPcb30 } from "../lib/boot/client";
   import { HexError, parseHex } from "../lib/boot/ihex";
   import { runUpdate, STEP_LABEL, UpdateError, type Step } from "../lib/boot/update";
   import { assetsFor, fetchAsset, loadReleases, type Release } from "../lib/boot/releases";
@@ -130,7 +130,9 @@
       : ["warn", t("firmware.modelModelPCBPcb", { model: id.model, pcb: id.pcb })]);
     else if (boot) c.push(["warn", t("firmware.modelUnknownNoKnown")]);
     const v30 = /V30/i.test(file.name), v4x = /V4[x01]/i.test(file.name);
-    if (clock !== null && (v30 || v4x)) c.push(v30 === !clock
+    if (v4x && id.model === "96ELN" && runsPcb30(file.image))   // forge-dsp-firmware#69: one build for PCB 3.0 and 4.x
+      c.push(["ok", t("firmware.runsBothBoards")]);
+    else if (clock !== null && (v30 || v4x)) c.push(v30 === !clock
       ? ["ok", clock ? t("firmware.boardFitsFileName") : t("firmware.boardFitsFileName2")]
       : ["bad", clock ? t("firmware.fileNameSaysPCB")
         : t("firmware.fileNameSaysPCB2")]);

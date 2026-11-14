@@ -53,7 +53,8 @@ export async function loadReleases(base = RELEASE_BASE, get: typeof fetch = fetc
  * Build variants a device can take, best first. model/pcb from system.key.info; hasClock tells the
  * 96ELN PCB 3.0 (no Si5338) from 4.x, which both report "96ELN-4.0" (null = unknown: both).
  * Port releases name the builds V30-96LN, V30-96ELN, V4x-96ELN (also CORE D8), V4x-96ELN-3; the
- * original release names every board (V40-96ELN, V41-CORED8, …).
+ * original release names every board (V40-96ELN, V41-CORED8, …). From port 2.5.0 (forge-dsp-firmware#69)
+ * V4x-96ELN also runs the PCB 3.0 and there is no V30-96ELN file any more (see assetsFor).
  */
 export function variantsFor(model: string, pcb: string, hasClock: boolean | null): string[] {
   const v4 = pcb.startsWith("4.") ? `V${pcb.replace(".", "")}` : "";
@@ -73,8 +74,15 @@ const variantOf = (file: string) => /^forge-dsp-(V[0-9x]{2}-[0-9A-Z]+(?:-3)?)-/i
 
 /** the assets of a release that fit the device, best first */
 export function assetsFor(rel: Release, model: string, pcb: string, hasClock: boolean | null): ReleaseAsset[] {
+  const of = (v: string) => rel.assets.filter((a) => variantOf(a.file).toUpperCase() === v.toUpperCase());
   const want = variantsFor(model, pcb, hasClock);
-  return want.flatMap((v) => rel.assets.filter((a) => variantOf(a.file).toUpperCase() === v.toUpperCase()));
+  // 96ELN PCB 3.0: releases without a V30-96ELN file run it in V4x-96ELN (port 2.5.0 on, #69). Older
+  // V4x-96ELN files expect the Si5338 and keep the outputs muted there, so only as the fallback.
+  if (model === "96ELN" && hasClock !== true && !of("V30-96ELN").length && !rel.original) {
+    const all = of("V4x-96ELN");
+    return hasClock === false ? all : want.flatMap(of);
+  }
+  return want.flatMap(of);
 }
 
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");

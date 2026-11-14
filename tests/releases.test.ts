@@ -26,6 +26,15 @@ describe("firmware from the releases (#10)", () => {
     expect(variantsFor("XYZ", "1.0", null)).toEqual([]);
   });
 
+  it("from port 2.5.0 one file for every 96ELN (forge-dsp-firmware#69)", () => {
+    const one: Release = { ...port, tag: "v2.5.0", name: "2.5.0",
+      assets: files(["forge-dsp-V30-96LN-2.5.0.hex", "forge-dsp-V4x-96ELN-2.5.0.hex", "forge-dsp-V4x-96ELN-3-2.5.0.hex"]) };
+    expect(pick(one, "96ELN", "4.0", false)).toEqual(["forge-dsp-V4x-96ELN-2.5.0.hex"]);    // PCB 3.0
+    expect(pick(one, "96ELN", "4.0", true)).toEqual(["forge-dsp-V4x-96ELN-2.5.0.hex"]);
+    expect(pick(one, "96ELN", "4.0", null)).toEqual(["forge-dsp-V4x-96ELN-2.5.0.hex"]);
+    expect(pick(port, "96ELN", "4.0", false)).toEqual(["forge-dsp-V30-96ELN-2.1.0.hex"]);    // older: still its own file
+  });
+
   it("index of the Pages build: newest first, only releases with .hex, no drafts", () => {
     const rel = (tag_name: string, published_at: string, draft = false) => ({ tag_name, published_at, draft, name: tag_name, html_url: "", prerelease: false });
     const bytes = new TextEncoder().encode("abc");

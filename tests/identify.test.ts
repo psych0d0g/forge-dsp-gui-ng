@@ -30,6 +30,10 @@ describe("what runs on the Forge, from its flash (#17)", () => {
     expect(identifyFlash(port("96LN", "3.0")).model).toBe("96LN");
   });
 
+  it("port from 2.5.0: one build for every 96ELN, the board is not in the image (forge-dsp-firmware#69)", () => {
+    expect(identifyFlash(port("96ELN", "4.0", "CORED8", "4.1", "ELN-PCB30"))).toMatchObject({ kind: "port", model: "96ELN", hasClock: null });
+  });
+
   it("a port image over an older original: the tail of the original behind it does not count", () => {
     const flash = port("96ELN", "4.0", "CORED8", "4.1");                       // the port image starts the flash
     flash.set(original("96ELN", "4.0", " * check si5338").subarray(0x200, 0x1000), 0x8000);   // the old tail further up

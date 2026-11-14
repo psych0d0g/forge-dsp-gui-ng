@@ -43,6 +43,7 @@ export function identifyFlash(flash: Uint8Array): FlashId {
     const has = (t: string) => w.includes(`\0${t}\0`);
     const id = has("96LN") ? { model: "96LN", pcb: "3.0", hasClock: false }
       : has("96ELN3") ? { model: "96ELN3", pcb: "4.0", hasClock: true }
+      : has("ELN-PCB30") ? { model: "96ELN", pcb: "4.0", hasClock: null }  // V4x from 2.5.0: every 96ELN (#69), the board is not in the image
       : has("CORED8") ? { model: "96ELN", pcb: "4.0", hasClock: true }     // V4x build: 96ELN 4.0 and CORE D8
       : has("96ELN") ? { model: "96ELN", pcb: "4.0", hasClock: false }     // V30 build: 96ELN only
       : null;

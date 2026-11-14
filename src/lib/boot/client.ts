@@ -181,5 +181,7 @@ export function imageContains(image: Uint8Array, text: string): boolean {
 
 /** The port firmware holds the identities it can take as NUL-terminated model and PCB strings
  * ("96ELN\0", "4.0\0"); an image for another model lacks them. */
+/** the image also runs the 96ELN with PCB 3.0 (the build for every 96ELN, forge-dsp-firmware#69) */
+export const runsPcb30 = (image: Uint8Array) => imageContains(image, "\0ELN-PCB30\0");
 export const imageKnows = (image: Uint8Array, model: string, pcb: string) =>
   !!model && !!pcb && imageContains(image, model + "\0") && imageContains(image, pcb + "\0");
