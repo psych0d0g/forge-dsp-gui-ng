@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { app, connect, disconnect, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
+  import { app, connect, disconnect, selectDevice, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
   import PortPicker from "./components/PortPicker.svelte";
   import { servedByBridge } from "./lib/transport/websocket";
   import Icon from "./components/Icon.svelte";
@@ -101,6 +101,12 @@
         <span class="muted sub">{online ? `${app.transportName}${app.demo ? ` ${t("app.noDevice2")}` : ""}${app.bootloader ? `, Bootloader ${app.bootloader.version}` : ""}`
           : app.status === "offline" ? t("common.notConnected") : t("app.connecting")}</span></div>
     </div>
+    {#if app.chain.length > 1}
+      <select class="chainsel" aria-label={t("app.chainDevice")} value={app.target} disabled={app.status !== "online"}
+        onchange={(e) => selectDevice(Number(e.currentTarget.value))}>
+        {#each app.chain as c}<option value={c.n}>{t("app.chainEntry", { n: c.n, model: c.model || "?" })}</option>{/each}
+      </select>
+    {/if}
     {#if online && !app.bootloader}<div class="live"><VuMeter /><MasterFader /></div>{/if}
     <div class="actions">
       {#if online}
@@ -195,6 +201,7 @@
 
 <style>
   .simpick { display: inline-flex; gap: .4rem; align-items: center; }
+  .chainsel { font: inherit; font-size: .85rem; padding: .25rem .4rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
   .lang { font-size: .75rem; font-weight: 650; letter-spacing: .04em; min-width: 2.2rem; }
   .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem minmax(0, 1fr); }
   .side { grid-area: side; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 3; }

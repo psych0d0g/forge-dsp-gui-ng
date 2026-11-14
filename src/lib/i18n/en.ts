@@ -56,6 +56,9 @@ export const EN: Record<Key, string> = {
   "common.size": "Size",
   "common.profileN": "Profile {n}",
   // app
+  "app.chainDevice": "Device in the chain",
+  "app.chainEntry": "Device {n}: {model}",
+  "app.noForgeAnswers": "No Forge answers on this port.",
   "app.signalPath": "Signal path",
   "app.control": "Control",
   "app.tools": "Tools",
@@ -317,6 +320,7 @@ export const EN: Record<Key, string> = {
   "filters.addEQBandGets": "Add EQ band (gets more slots, restart)",
   "filters.band": "Band",
   // firmware
+  "firmware.onlyFirstDevice": "The update works only for device 1, the Forge on the USB port: the bootloader cannot be reached through the RS485 chain.",
   "firmware.noAnswerFromBootloader": "no answer from the bootloader",
   "firmware.bootloaderReportsTransmissionError": "bootloader reports a transmission error",
   "firmware.emptyAnswer": "empty answer",

@@ -56,6 +56,9 @@ export const DE = {
   "common.size": "Größe",
   "common.profileN": "Profil {n}",
   // app
+  "app.chainDevice": "Gerät in der Kette",
+  "app.chainEntry": "Gerät {n}: {model}",
+  "app.noForgeAnswers": "Kein Forge antwortet an diesem Anschluss.",
   "app.signalPath": "Signalweg",
   "app.control": "Steuerung",
   "app.tools": "Werkzeuge",
@@ -317,6 +320,7 @@ export const DE = {
   "filters.addEQBandGets": "EQ-Band hinzufügen (holt weitere Plätze, Neustart)",
   "filters.band": "Band",
   // firmware
+  "firmware.onlyFirstDevice": "Das Update geht nur für Gerät 1, den Forge am USB-Anschluss: Der Bootloader ist über die RS485-Kette nicht erreichbar.",
   "firmware.noAnswerFromBootloader": "keine Antwort vom Bootloader",
   "firmware.bootloaderReportsTransmissionError": "Bootloader meldet Übertragungsfehler",
   "firmware.emptyAnswer": "leere Antwort",

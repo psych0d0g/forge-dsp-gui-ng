@@ -4,7 +4,8 @@ import { SimTarget } from "../boot/sim";
 import { emptyState, type DeviceState } from "./model";
 
 /** A Forge 96ELN with a plausible tuning, to look at the interface without a device. */
-export function demoState(): DeviceState {
+/** the demo device; n = 2: a second one behind the slave port (RS485 chain, #15), an ETON CORE D8 */
+export function demoState(n = 1): DeviceState {
   const s = emptyState();
   Object.assign(s.identity, { keyInfo: "DEMO-96ELN-4.0-0000000000000000-CCBYNCSA-20261112-MDD", model: "96ELN", pcb: "4.0",
     firmware: "1.11.6000", port: "2.0.0", sampleRate: 96000, analogInPairs: 3, spdifPairs: 1, outPairs: 4, presets: 4,
@@ -57,8 +58,15 @@ export function demoState(): DeviceState {
   s.vu = [0, 0, 0, 0, 0, 0, 215, 213];
   s.vuOut = [200, 197, 196, 193, 180, 178, 150, 148];
   s.events = { 58: 231, 59: 231 };  // volume block 2: -12 dB
+  if (n === 2) {
+    Object.assign(s.identity, { keyInfo: DEMO_KEY2, model: "CORED8", pcb: "4.1" });
+    s.gain.out = [223, 223, 219, 219, 207, 207, 223, 223];
+    s.mute = [0, 0, 0, 0, 0, 0, 0, 0];
+    ["Tür L", "Tür R", "Kick L", "Kick R", "Center", "Rear", "Sub 1", "Sub 2"].forEach((x, i) => (s.channelNames[i + 1] = x));
+  }
   return s;
 }
+const DEMO_KEY2 = "DEMO-CORED8-4.1-0000000000000002-CCBYNCSA-20261112-MDD";
 
 /** Accepts every write, knows no reads: the demo state is already complete. */
 /** a few records as the DEV unit wrote them (forge-dsp-firmware#60, docs/log-format.md) */
@@ -147,6 +155,11 @@ export class DemoTransport implements Transport {
     if (/system\.boot/.test(line)) { this.bytes.started = false; return; }
     const m = /^(get|set)\.(\S+) ([^=;\s]+)/.exec(line);
     if (!m) return;
+    // a chain of two: device 2 answers like device 1 (with its own identity), nobody behind it
+    const target = Number(m[2]);
+    if (target > 2) return;
+    const emit = (l: string) => this.fn(target === 2
+      ? l.replace(/^(\s*[<>*!#])\.1 /, "$1.2 ").replace(/"DEMO-96ELN-4\.0-[^"]*"/, `"${DEMO_KEY2}"`) : l);
     let out = m[1] === "set" ? ` *.1 ${m[3]} ok` : ` !.1 ${m[3]} unknown command`;
     if (m[1] === "set" && m[3] === "system.errors") this.errors = "[]";
     const ev = /^event\.(\d+)\.value$/.exec(m[3]);
@@ -157,7 +170,7 @@ export class DemoTransport implements Transport {
     if (m[1] === "get" && m[3] === "system.debug.out") out = ` <.1 system.debug.out=${this.dbgOut}`;
     if (m[1] === "get" && m[3] === "system.debug.mode") out = ` <.1 system.debug.mode=${this.dbgMode}`;
     if (m[3].startsWith("system.sd")) {
-      setTimeout(() => this.fn(this.sd.line(m[1], m[3], line)), 15);
+      setTimeout(() => emit(this.sd.line(m[1], m[3], line)), 15);
       return;
     }
     if (m[1] === "get" && m[3] === "system.vu") {  // music-like movement on the digital input
@@ -181,7 +194,7 @@ export class DemoTransport implements Transport {
       };
       if (fixed[m[3]]) out = ` <.1 ${m[3]}=${fixed[m[3]]}`;
     }
-    setTimeout(() => this.fn(out), 15);
+    setTimeout(() => emit(out), 15);
   }
   onLine(fn: (l: string) => void) { this.fn = fn; }
   async close() {}

@@ -10,7 +10,7 @@ import { isNative } from "./native";
 import { openSim, simFlavours } from "./transport/sim";
 import { openWebSocket } from "./transport/websocket";
 import { t } from "./i18n/index.svelte";
-import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
+import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, parseKeyInfo, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
 
@@ -48,6 +48,9 @@ export const app = $state({
   bootloader: null as null | BootState,
   /** waiting for the Forge to come back in its bootloader (first update from the original firmware) */
   bootWait: false,
+  /** the devices of the RS485 chain (#15): 1 = the one at this port; and the one shown */
+  chain: [] as { n: number; model: string }[],
+  target: 1,
 });
 
 let transport: Transport | null = null;
@@ -61,7 +64,8 @@ function attach(t: Transport) {
     app.log.push({ dir, text: text.trimEnd() });
     if (app.log.length > 400) app.log.splice(0, app.log.length - 400);
   });
-  client.onAnswer((a) => applyAnswer(app.device, a));  // events, lines without a request
+  // events, lines without a request; those of other devices in the chain belong to them
+  client.onAnswer((a) => { if (a.device === (client?.target ?? 1)) applyAnswer(app.device, a); });
   app.transportName = t.name;
 }
 
@@ -99,16 +103,16 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
       app.device = demoState();
       app.demo = true;
     } else {
-      const t = kind === "usb" ? await openUsb() : kind === "sim" ? await openSim(sim.flavour) : await openWebSocket();
-      attach(t);
+      const tr = kind === "usb" ? await openUsb() : kind === "sim" ? await openSim(sim.flavour) : await openWebSocket();
+      attach(tr);
       app.demo = false;
       if (kind === "usb") {
         // the bootloader instead of a firmware: still talking to it from before, or waiting at its start
-        let bl = await findBootloader(t, 0);
+        let bl = await findBootloader(tr, 0);
         if (!bl) {
-          await t.write("\r\n");                       // end what the probe left in the line buffer
-          if (!(await firmwareAnswers())) bl = await findBootloader(t, 3000);
-          if (!bl && !(await firmwareAnswers())) throw new Error("Kein Forge antwortet an diesem Anschluss.");
+          await tr.write("\r\n");                       // end what the probe left in the line buffer
+          if (!(await firmwareAnswers())) bl = await findBootloader(tr, 3000);
+          if (!bl && !(await firmwareAnswers())) throw new Error(t("app.noForgeAnswers"));
         }
         if (bl) {
           await bootloaderMode(bl);
@@ -119,10 +123,11 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
       app.device = await readDevice(client!, (p) => (app.progress = p));
       await readMaster();
       app.progress = null;
-      if (!app.device.identity.keyInfo && !app.device.identity.firmware) throw new Error("Kein Forge antwortet an diesem Anschluss.");
+      if (!app.device.identity.keyInfo && !app.device.identity.firmware) throw new Error(t("app.noForgeAnswers"));
     }
     loadInNames();
     app.status = "online";
+    await findChain();
   } catch (e) {
     app.error = explain(e);
     await disconnect();
@@ -134,6 +139,8 @@ export async function disconnect() {
   transport = null;
   client = null;
   app.bootloader = null;
+  app.chain = [];
+  app.target = 1;
   app.status = "offline";
   app.progress = null;
   app.demo = false;
@@ -149,6 +156,42 @@ export async function reload() {
   await readMaster();
   app.progress = null;
   app.status = "online";
+}
+
+// --- devices in the RS485 chain (#15) ------------------------------------------------------------
+/** further Forge behind the slave port answer as .2, .3, … (firmware cmd_route.c); 1 is this one */
+const CHAIN_MAX = 6;
+export async function findChain() {
+  const c = client;
+  if (!c) return;
+  const found = [{ n: 1, model: app.device.identity.model }];
+  app.exclusive = true;
+  try {
+    for (let n = 2; n <= CHAIN_MAX; n++) {
+      const target = n as 2 | 3 | 4 | 5 | 6;
+      const ping = await c.get("system.ping", { target, timeoutMs: 600 }).catch(() => []);
+      if (!ping.some((a) => a.kind === "get")) break;
+      const key = (await c.get("system.key.info", { target, timeoutMs: 800 }).catch(() => [])).find((a) => a.kind === "get");
+      found.push({ n, model: parseKeyInfo(String(key?.value ?? "")).model });
+    }
+  } finally {
+    app.exclusive = false;
+  }
+  app.chain = found.length > 1 ? found : [];
+}
+/** show another device of the chain: everything is read from it */
+export async function selectDevice(n: number) {
+  if (!client || n === app.target) return;
+  client.target = n as 1 | 2 | 3 | 4 | 5 | 6;
+  app.target = n;
+  if (app.page === "firmware" && n !== 1) app.page = "overview";
+  if (app.demo) { app.device = demoState(n); return; }
+  try {
+    await reload();
+    loadInNames();
+  } catch (e) {
+    app.error = explain(e);
+  }
 }
 
 // --- bootloader (#17) -----------------------------------------------------------------------------

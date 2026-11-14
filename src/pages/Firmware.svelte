@@ -281,6 +281,8 @@
         {/if}
         <div class="btns"><button class="ghost" onclick={() => flow?.abort.abort()}>{t("common.cancel")}</button></div>
       </div>
+    {:else if app.target !== 1}
+      <p class="muted">{t("firmware.onlyFirstDevice")}</p>
     {:else if !usb}
       <p class="muted">{t("firmware.updateWorksOnlyOver")}</p>
     {:else}
