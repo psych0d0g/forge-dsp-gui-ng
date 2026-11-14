@@ -1017,6 +1017,23 @@ export const DE = {
   "device.capHold": "Endstufen an",
   "firmware.runsBothBoards": "Die Datei läuft auf dem 96ELN mit PCB 3.0 und 4.x (gemeinsamer Build).",
   "modc.moreOnDevicePage": "{n} weitere (Ein-/Ausschalten, Takt, S/PDIF, D/A-Wandler) stehen auf der Seite",
+  // filters from REW (#23)
+  "rew.notSupported": "gibt es im Forge nicht",
+  "rew.noFrequency": "ohne Frequenz",
+  "rew.limited": "auf den Bereich des Forge begrenzt",
+  "rew.button": "Aus REW …",
+  "rew.title": "Filter aus REW übernehmen",
+  "rew.howTo": "In REW unter EQ › Filter Tasks › „Save filter settings to file“ (Equaliser: Generic) speichern und hier laden oder den Text einfügen. Auch Equalizer-APO-Dateien gehen.",
+  "rew.file": "Datei laden …",
+  "rew.paste": "Text aus REW",
+  "rew.nFound": "{n} Filter erkannt, {ok} übernehmbar.",
+  "rew.noneFound": "Keine Filter im Text gefunden.",
+  "rew.replace": "Filter & EQ dieses Kanals ersetzen",
+  "rew.add": "Zu den vorhandenen hinzufügen (freie Plätze)",
+  "rew.lost": "{n} passen nicht in die Plätze dieses Kanals (mehr Plätze unter Biquad-Verteilung).",
+  "rew.apply": "{n} Filter nach {name} übernehmen",
+  "rew.done": "{n} Filter übernommen.",
+  "rew.confirmReplace": "Alle Filter & EQ von {name} werden ersetzt. Weiter?",
 } as const;
 
 export type Key = keyof typeof DE;

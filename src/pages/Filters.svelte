@@ -6,6 +6,7 @@
   import { channelColor } from "../lib/channelColors";
   import { isPort, limitsOf, planCopy, poolOf, proposeGrow, rawToDb, sumsActiveAnywhere, type Biquad } from "../lib/device";
   import { coeffs, isActive, typeInfo, TYPES, viewRange, type SumPart } from "../lib/dsp/biquad";
+  import { parseRew, planRew, type RewFilter } from "../lib/dsp/rew";
   import ResponsePlot from "../components/ResponsePlot.svelte";
   import Icon from "../components/Icon.svelte";
   import VFader from "../components/VFader.svelte";
@@ -119,6 +120,39 @@
     copyNote = n ? t("filters.nSlotsWritten", { n }) : t("filters.alreadySameNothingWrite");
     copyOpen = false;
     copyTo = [];
+  }
+
+  // filters from REW (#23): into this channel only, the partner is not changed
+  let rewOpen = $state(false);
+  let rewText = $state("");
+  let rewReplace = $state(true);
+  const rew = $derived<RewFilter[]>(rewText.trim() ? parseRew(rewText, lim, (ty) => can({ type: ty, port: typeInfo(ty)?.port })) : []);
+  const rewOk = $derived(rew.flatMap((r) => (r.bq ? [r.bq] : [])));
+  const rewPlan = $derived(planRew(d.biquads[ch] ?? {}, rewOk, rewReplace));
+  async function rewFile(e: Event) {
+    const f = (e.currentTarget as HTMLInputElement).files?.[0];
+    (e.currentTarget as HTMLInputElement).value = "";
+    if (f) rewText = await f.text();
+  }
+  function rewDescribe(r: RewFilter): string {
+    if (!r.bq) return "";
+    const ti = typeInfo(r.bq.type), p = [ti ? tx(ti.name) : String(r.bq.type), `${r.bq.f} Hz`];
+    if (ti?.gain) p.push(`${r.bq.gain > 0 ? "+" : ""}${(r.bq.gain / 10).toFixed(1)} dB`);
+    if (ti?.q) p.push(`Q ${+(r.bq.q / 1000).toFixed(2)}`);
+    if (ti?.b && r.bq.type === 16) p.push(`${r.bq.b} Hz`);
+    return p.join(", ");
+  }
+  function rewApply() {
+    if (rewReplace && used.length && !confirm(t("rew.confirmReplace", { name: chName(ch) }))) return;
+    for (const [n, bq] of rewPlan.writes) {
+      d.biquads[ch][n] = bq;
+      send(ch, n, bq);
+    }
+    copyNote = t("rew.done", { n: rewOk.length - rewPlan.lost });
+    rewOpen = false;
+    rewText = "";
+    selected = null;
+    resort();
   }
 
   function send(c: number, n: number, bq: Biquad) {
@@ -337,7 +371,41 @@
       <button class="ghost copybtn" aria-expanded={copyOpen} onclick={() => { copyOpen = !copyOpen; copyNote = ""; }}
         title={t("filters.copyAllFiltersEQ")}>{t("filters.copy")}</button>
     {/if}
+    <button class="ghost copybtn" aria-expanded={rewOpen} onclick={() => { rewOpen = !rewOpen; copyNote = ""; }}
+      title={t("rew.title")}>{t("rew.button")}</button>
   </div>
+  {#if rewOpen}
+    <div class="rew" role="group" aria-label={t("rew.title")}>
+      <p class="muted small">{t("rew.howTo")}</p>
+      <div class="rewrow">
+        <label class="filebtn">{t("rew.file")}<input type="file" accept=".txt,.cfg,text/plain" onchange={rewFile} /></label>
+      </div>
+      <textarea bind:value={rewText} rows="5" aria-label={t("rew.paste")} placeholder="Filter  1: ON  PK  Fc 63.0 Hz  Gain -5.0 dB  Q 4.00"></textarea>
+      {#if rewText.trim()}
+        {#if rew.length}
+          <p class="small">{t("rew.nFound", { n: rew.length, ok: rewOk.length })}</p>
+          <ul class="rewlist">
+            {#each rew as r}
+              <li class:off={!r.bq}><span class="num">{r.nr}</span> <span class="kind">{r.kind}</span>
+                {rewDescribe(r)}{#if r.note}<em class:warn={!r.bq || r.note === "rew.limited"}>{"\u00a0– "}{t(r.note)}</em>{/if}</li>
+            {/each}
+          </ul>
+          <div class="rewrow">
+            <label class="check"><input type="radio" name="rewmode" checked={rewReplace} onchange={() => (rewReplace = true)} /> {t("rew.replace")}</label>
+            <label class="check"><input type="radio" name="rewmode" checked={!rewReplace} onchange={() => (rewReplace = false)} /> {t("rew.add")}</label>
+          </div>
+          {#if rewPlan.lost}<p class="warn small">{t("rew.lost", { n: rewPlan.lost })}</p>{/if}
+          <div class="rewrow">
+            <button class="primary" disabled={!rewOk.length || rewPlan.lost >= rewOk.length} onclick={rewApply}>
+              {t("rew.apply", { n: rewOk.length - rewPlan.lost, name: chName(ch) })}</button>
+            <button class="ghost" onclick={() => { rewOpen = false; rewText = ""; }}>{t("common.cancel")}</button>
+          </div>
+        {:else}
+          <p class="warn small">{t("rew.noneFound")}</p>
+        {/if}
+      {/if}
+    </div>
+  {/if}
   {#if copyOpen}
     <div class="copy" role="group" aria-label={t("filters.copyTarget")}>
       <span class="muted">{t("filters.copyName", { name: chName(ch) })}</span>
@@ -436,6 +504,19 @@
   .check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; }
   .check input { accent-color: var(--accent); }
   .overlay { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-bottom: .4rem; font-size: .8rem; }
+  .rew { display: grid; gap: .45rem; padding: .5rem 0; border-top: 1px solid var(--line); }
+  .rew textarea { width: 100%; font-family: var(--mono, monospace); font-size: .8rem; resize: vertical; min-height: 5rem;
+    background: var(--raised); color: var(--fg); border: 1px solid var(--line-strong); border-radius: 8px; padding: .4rem .5rem; }
+  .rewrow { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
+  .rewlist { margin: 0; padding: 0; list-style: none; display: grid; gap: .1rem; font-size: .82rem; max-height: 14rem; overflow-y: auto; }
+  .rewlist .num { color: var(--faint); display: inline-block; min-width: 1.6rem; text-align: right; }
+  .rewlist .kind { color: var(--muted); display: inline-block; min-width: 3.2rem; }
+  .rewlist li.off { color: var(--muted); }
+  .rewlist em { font-style: normal; }
+  .warn { color: var(--warn); }
+  .filebtn { padding: .35rem .8rem; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--raised); cursor: pointer; font-size: .85rem; position: relative; }
+  .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
   .copy { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .5rem 0; border-top: 1px solid var(--line); }
   .copy .chip { border: 1px solid var(--line-strong); cursor: pointer; position: relative; background: var(--raised); }
   .copy .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
