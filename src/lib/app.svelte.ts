@@ -1,5 +1,5 @@
 // Application state (Svelte 5 runes): connection, device model, log, navigation.
-import { ForgeClient, type Answer, type Value } from "./protocol";
+import { ForgeClient, parseValue, type Answer, type Value } from "./protocol";
 import type { ByteLink, Transport } from "./transport/types";
 import { grantedPort, openWebSerial } from "./transport/webserial";
 import { APP_SIZE, Bootloader, EEPROM_SIZE } from "./boot/client";
@@ -10,6 +10,7 @@ import { isNative } from "./native";
 import { openSim, simFlavours } from "./transport/sim";
 import { openWebSocket } from "./transport/websocket";
 import { t } from "./i18n/index.svelte";
+import { history, historyAttach, historyReset, historyTouch, redo, undo, type HistoryIo } from "./history.svelte";
 import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, parseKeyInfo, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
@@ -130,6 +131,7 @@ export async function connect(kind: "usb" | "esp" | "demo" | "sim") {
     }
     loadInNames();
     app.status = "online";
+    historyReset(app.device);
     await findChain();
   } catch (e) {
     app.error = explain(e);
@@ -160,7 +162,24 @@ export async function reload() {
   await readMaster();
   app.progress = null;
   app.status = "online";
+  historyReset(app.device);
 }
+
+// --- undo / redo (#24) ----------------------------------------------------------------------------
+historyAttach(() => app.device);
+export { history };
+const historyIo: HistoryIo = {
+  writeRaw,
+  async applied(reg, text) {
+    // the control blocks read back (hex fields in the text); everything else as written
+    if (reg.startsWith("modc.") && !app.demo) return query(reg);
+    try { applyAnswer(app.device, { kind: "get", device: 1, register: reg.replace(/\.calc$/, ""), value: parseValue(text), raw: "" }); }
+    catch { await query(reg.replace(/\.calc$/, "")); }
+  },
+  async idle() { while (app.writing > 0) await new Promise((r) => setTimeout(r, 50)); },
+};
+export async function undoChange() { const e = await undo(historyIo); if (e) app.error = e; }
+export async function redoChange() { const e = await redo(historyIo); if (e) app.error = e; }
 
 // --- faster USB-COM (forge-dsp-firmware#62) -------------------------------------------------------
 /** the port firmware switches its USB-COM up to 460800 Bd on request (not stored: 38400 again after
@@ -244,7 +263,7 @@ export async function selectDevice(n: number) {
   client.target = n as 1 | 2 | 3 | 4 | 5 | 6;
   app.target = n;
   if (app.page === "firmware" && n !== 1) app.page = "overview";
-  if (app.demo) { app.device = demoState(n); return; }
+  if (app.demo) { app.device = demoState(n); historyReset(app.device); return; }
   try {
     await reload();
     loadInNames();
@@ -574,6 +593,7 @@ const pending = new Map<string, { busy: boolean; next?: Value }>();
 /** Writes a register with checksum. The caller has already put the value into app.device. */
 export function write(reg: string, value: Value) {
   if (!client) return;
+  historyTouch();
   const p = pending.get(reg) ?? { busy: false };
   pending.set(reg, p);
   if (p.busy) {

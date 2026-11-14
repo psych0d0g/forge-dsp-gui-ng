@@ -98,3 +98,23 @@ test("output limiter: a threshold set in the mixer reaches the firmware", async 
   await page.getByRole("button", { name: "Senden" }).click();
   await expect(page.locator("main pre")).toContainText("system.dsp.limiter=[-60,");
 });
+
+test("undo and redo a change (Ctrl+Z / Ctrl+Y) reach the firmware", async ({ page }) => {
+  await start(page);
+  await nav(page, "Laufzeit");
+  const field = page.getByLabel(/^Laufzeit .* in ms$/).first();
+  await field.fill("2.50");
+  await field.press("Enter");
+  await page.waitForTimeout(1500);                       // the step is taken after a quiet moment
+  await page.locator("main h2").click();                 // out of the field: Ctrl+Z belongs to the page
+  await page.keyboard.press("Control+z");
+  await expect(field).toHaveValue("0.00");
+  await page.keyboard.press("Control+y");
+  await expect(field).toHaveValue("2.50");
+  await page.getByRole("button", { name: /^Rückgängig/ }).click();
+  await expect(field).toHaveValue("0.00");
+  await nav(page, "Konsole");
+  await page.getByLabel("Befehl").fill("get.1 delay.in.1");
+  await page.getByRole("button", { name: "Senden" }).click();
+  await expect(page.locator("main pre")).toContainText("delay.in.1=0");
+});

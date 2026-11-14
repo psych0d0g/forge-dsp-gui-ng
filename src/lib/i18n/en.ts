@@ -56,6 +56,8 @@ export const EN: Record<Key, string> = {
   "common.size": "Size",
   "common.profileN": "Profile {n}",
   // app
+  "app.undo": "Undo (Ctrl+Z)",
+  "app.redo": "Redo (Ctrl+Y)",
   "app.chainDevice": "Device in the chain",
   "app.chainEntry": "Device {n}: {model}",
   "app.noForgeAnswers": "No Forge answers on this port.",

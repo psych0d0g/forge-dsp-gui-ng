@@ -67,7 +67,7 @@ export function parseCfg(text: string): { model: string | null; entries: Entry[]
 }
 
 /** equal filters compare equal: any bypass is the same, whatever its f/q say */
-function canonical(reg: string, v: string): string {
+export function canonical(reg: string, v: string): string {
   if (reg.startsWith("biquad.")) {
     const n = v.replace(/[[\]]/g, "").split(",").map(Number);
     if (n[0] === 0 || ((n[5] ?? 128) & 0x80) === 0) return "bypass";

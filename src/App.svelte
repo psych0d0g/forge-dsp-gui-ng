@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { app, connect, disconnect, selectDevice, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
+  import { app, connect, disconnect, history, redoChange, selectDevice, undoChange, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
   import PortPicker from "./components/PortPicker.svelte";
   import { servedByBridge } from "./lib/transport/websocket";
   import Icon from "./components/Icon.svelte";
@@ -65,6 +65,15 @@
     theme = dark ? "light" : "dark";
     try { localStorage.setItem("theme", theme); } catch { /* private mode */ }
   }
+  // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z): undo and redo of the device changes; fields keep their own undo
+  function keys(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || app.status !== "online") return;
+    const el = e.target as HTMLElement | null;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+    const k = e.key.toLowerCase();
+    if (k === "z" && !e.shiftKey) { e.preventDefault(); undoChange(); }
+    else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redoChange(); }
+  }
   function open(id: PageId) {
     app.page = id;
     navOpen = false;
@@ -74,6 +83,7 @@
     : app.bootWait ? t("app.waitingBootloader") : app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : t("app.noDevice"));
 </script>
 
+<svelte:window onkeydown={keys} />
 <div class="shell" class:nav-open={navOpen}>
   <aside class="glass side">
     <div class="brand"><span class="logo">F</span><span>Forge DSP</span></div>
@@ -110,6 +120,10 @@
     {#if online && !app.bootloader}<div class="live"><VuMeter /><MasterFader /></div>{/if}
     <div class="actions">
       {#if online}
+        {#if !app.bootloader}
+          <button class="ghost hist" title={t("app.undo")} aria-label={t("app.undo")} disabled={!history.canUndo || history.busy} onclick={undoChange}>↶</button>
+          <button class="ghost hist" title={t("app.redo")} aria-label={t("app.redo")} disabled={!history.canRedo || history.busy} onclick={redoChange}>↷</button>
+        {/if}
         {#if !app.demo && !app.bootloader}<button class="ghost" title={t("app.readEverythingAgain")} onclick={reload}><Icon name="refresh" /></button>{/if}
         <button onclick={disconnect}>{t("app.disconnect")}</button>
       {:else if app.status === "offline"}
@@ -202,6 +216,7 @@
 <style>
   .simpick { display: inline-flex; gap: .4rem; align-items: center; }
   .chainsel { font: inherit; font-size: .85rem; padding: .25rem .4rem; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--fg); }
+  .hist { font-size: 1.15rem; line-height: 1; padding: .3rem .45rem; }
   .lang { font-size: .75rem; font-weight: 650; letter-spacing: .04em; min-width: 2.2rem; }
   .shell { height: 100%; display: grid; grid-template: "side top" auto "side main" 1fr "side status" auto / 14.5rem minmax(0, 1fr); }
   .side { grid-area: side; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 3; }

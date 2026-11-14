@@ -56,6 +56,8 @@ export const DE = {
   "common.size": "Größe",
   "common.profileN": "Profil {n}",
   // app
+  "app.undo": "Rückgängig (Strg+Z)",
+  "app.redo": "Wiederholen (Strg+Y)",
   "app.chainDevice": "Gerät in der Kette",
   "app.chainEntry": "Gerät {n}: {model}",
   "app.noForgeAnswers": "Kein Forge antwortet an diesem Anschluss.",
