@@ -63,6 +63,8 @@ function attach(t: Transport) {
   transport = t;
   client = new ForgeClient(t);
   usbBaud = 38400;
+  // two requests in a row without any line: page and Forge may be at different rates
+  client.onMiss((n) => { if (n >= 2 && app.status !== "connecting") void recoverRate(); });
   client.onRaw((text, dir) => {
     if (dir === "tx") lastTx = Date.now();
     if (sdBusy || isPollLine(text)) return;  // status reads and file blocks would flood the console
@@ -294,7 +296,13 @@ export async function usbFast() {
   const tr = transport, c = client;
   if (!tr?.setBaud || !c || usbBaud === USB_FAST) return;
   const ok = (await c.set("system.baud.usb", USB_FAST / 1200, { timeoutMs: 1000 }).catch(() => [])).some((a) => a.kind === "info");
-  if (!ok) return;
+  if (!ok) {
+    // no confirmation seen: the Forge may have switched all the same (a lost line); talk at the
+    // rate it is at, never stay apart
+    if ((await c.get("system.ping", { timeoutMs: 400 }).catch(() => [])).some((a) => a.kind === "get")) return;
+    await atFastRate(tr);
+    return;
+  }
   await new Promise((r) => setTimeout(r, 30));   // the answer has left, the Forge switches
   await tr.setBaud(USB_FAST);
   usbBaud = USB_FAST;
@@ -337,34 +345,36 @@ export async function afterRestart() {
 // keep the fast rate: a line at least every 10 s, also while the tab is hidden (no status reads then)
 if (typeof window !== "undefined") setInterval(() => {
   if (usbBaud !== 38400 && client && !app.exclusive && Date.now() - lastTx > 10000)
-    client.get("system.ping").catch(() => { void recoverRate(); });
+    client.get("system.ping").catch(() => []);
 }, 2000);
 
 /**
- * The Forge went back to 38400 while this page still talks at USB_FAST: browsers slow the timers of
- * a hidden tab down (Chrome to once a minute after 5 min), the keepalive misses the 30 s of the
- * firmware. Asked when a line at USB_FAST gets no answer and when the tab is shown again: once more
- * at USB_FAST, else at 38400, and up again.
+ * Page and Forge at different rates: the Forge went back to 38400 while the tab was hidden (browsers
+ * slow its timers down, the keepalive misses the 30 s of the firmware), or a confirmation of
+ * system.baud.usb arrived too late (the Forge busy for a moment) and only one side switched.
+ * Checked after two requests in a row without any line and when the tab is shown again: asked at
+ * the present rate, then at the other one; the one where the Forge answers is kept.
  */
 let recovering = false;
 export async function recoverRate() {
   const tr = transport, c = client;
-  if (recovering || !tr?.setBaud || !c || usbBaud !== USB_FAST || app.bootloader) return;
+  if (recovering || !tr?.setBaud || !c || app.bootloader || app.demo) return;
   recovering = true;
-  const ex = app.exclusive;
-  app.exclusive = true;
   try {
     const ping = (ms: number) => c.get("system.ping", { timeoutMs: ms }).then((a) => a.some((x) => x.kind === "get")).catch(() => false);
-    if (await ping(500)) return;
-    await tr.setBaud(38400);
-    usbBaud = 38400;
-    c.quietMs = 200;
+    if (await ping(600)) return;
+    const now = usbBaud, other = now === USB_FAST ? 38400 : USB_FAST;
+    await tr.setBaud(other);
+    await tr.write("\r\n");
     if (await ping(800)) {
-      app.exclusive = ex;   // usbFast talks itself
-      await usbFast();
+      usbBaud = other;
+      c.quietMs = other === USB_FAST ? 100 : 200;
+      lastTx = Date.now();
+      if (other === 38400) await usbFast();   // and up again
+    } else {
+      await tr.setBaud(now);   // not there either (busy, or switched off): stay
     }
   } finally {
-    app.exclusive = ex;
     recovering = false;
   }
 }
@@ -820,8 +830,7 @@ async function poll() {
       for (const a of await c.get(reg)) applyAnswer(app.device, a);
     }
   } catch {
-    /* a missed status read is harmless, the next one follows; at USB_FAST it may be the rate */
-    if (usbBaud === USB_FAST) setTimeout(() => void recoverRate(), 0);
+    /* a missed status read is harmless, the next one follows (the rate is checked on misses) */
   } finally {
     polling = false;
     pollRegs = [];

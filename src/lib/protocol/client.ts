@@ -21,6 +21,10 @@ export class ForgeClient {
   }
 
   onAnswer(fn: (a: Answer) => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+  /** requests in a row that got no line at all (reset by any answer): the line may be at another rate */
+  misses = 0;
+  private missListeners = new Set<(n: number) => void>();
+  onMiss(fn: (n: number) => void) { this.missListeners.add(fn); return () => this.missListeners.delete(fn); }
   onRaw(fn: (line: string, dir: "rx" | "tx") => void) { this.rawListeners.add(fn); return () => this.rawListeners.delete(fn); }
 
   get(reg: string, o?: LineOptions) { const x = this.opts(o); return this.request(getLine(reg, x), reg, o?.timeoutMs, x.target, o?.until); }
@@ -34,6 +38,7 @@ export class ForgeClient {
     for (const f of this.rawListeners) f(line, "rx");
     const a = parseAnswer(line);
     if (!a) return;
+    this.misses = 0;
     // an answer of another device of the chain (or an event) does not end the request
     if (this.pending && a.kind !== "event" && (this.pending.device === null || a.device === this.pending.device)) this.pending.fn(a);
     else for (const f of this.listeners) f(a);
@@ -49,10 +54,21 @@ export class ForgeClient {
         const finish = (err?: Error) => {
           clearTimeout(timer);
           this.pending = null;
+          if (err && got.length === 0 && /^timeout/.test(err.message)) {
+            this.misses++;
+            for (const f of this.missListeners) f(this.misses);
+          }
           if (err && got.length === 0) reject(err);
           else resolve(got);
         };
         this.pending = { device, fn: (a) => {
+          // a line for another register (left over from before: the answer to an earlier request
+          // that timed out, lines of a page that was reloaded) does not end a single request; taking
+          // it would shift every following answer by one
+          if (!wild && !until && a.kind !== "error" && a.register !== reg) {
+            for (const f of this.listeners) f(a);
+            return;
+          }
           got.push(a);
           if (a.kind === "error") return finish();
           if (!wild && a.register === reg) return finish();

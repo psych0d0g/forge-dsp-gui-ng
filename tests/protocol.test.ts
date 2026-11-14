@@ -102,3 +102,21 @@ describe("until: a wildcard answer with pauses (forge-dsp-firmware#64)", () => {
     expect(a.map((x) => x.register)).toEqual(["biquad.3.2", "biquad.used"]);
   });
 });
+
+describe("lines left over from before do not shift the answers", () => {
+  it("a stale answer is not taken for the next request", async () => {
+    const lines: ((l: string) => void)[] = [];
+    const sent: string[] = [];
+    const t = { name: "t", onLine: (f: (l: string) => void) => lines.push(f), close: async () => {}, write: async (l: string) => {
+      sent.push(l);
+      const out = sent.length === 1 ? [' <.1 system.ping="pong"', ' <.1 system.firmware="1.11.6000"']   // a stale pong first
+        : l.includes("baud") ? [" *.1 system.baud.usb ok"] : [];
+      out.forEach((x, i) => setTimeout(() => lines.forEach((f) => f(x)), 5 + i * 5));
+    } };
+    const c = new ForgeClient(t, 300, 50);
+    const a = await c.get("system.firmware");
+    expect(a.map((x) => x.register)).toEqual(["system.firmware"]);
+    const b = await c.set("system.baud.usb", 384);
+    expect(b[0].kind).toBe("info");
+  });
+});
