@@ -1,8 +1,9 @@
 <script lang="ts">
   import { t } from "../lib/i18n/index.svelte";
   import { saveFile } from "../lib/saveFile";
-  import { app, loadPreset, saveTuningFile, reload, writeOnce, writeRaw } from "../lib/app.svelte";
-  import { entriesToWrite, parseCfg, restorable, stateToEntries, toCfg, type Entry } from "../lib/device";
+  import { app, comparePreset, inName, loadPreset, outName, saveTuningFile, reload, writeOnce, writeRaw } from "../lib/app.svelte";
+  import { compareRows, entriesToWrite, inPreset, parseCfg, restorable, stateToEntries, type CompareRow, type Entry } from "../lib/device";
+  import CompareTable from "../components/CompareTable.svelte";
 
   const d = $derived(app.device);
   const count = $derived(d.identity.presets || 4);
@@ -46,6 +47,27 @@
     return err ? t("presets.refusedErr", { err }) : t("presets.forgeNowStartsPreset", { n: n + 1 });
   });
 
+  // --- compare (#24) ------------------------------------------------------------------------
+  const names = { out: outName, in: inName };
+  let cmp = $state<{ title: string; a: string; b: string; rows: CompareRow[] } | null>(null);
+  const compare = (n: number) => run(t("presets.comparingAB", { a: loaded! + 1, b: n + 1 }), async () => {
+    const a = loaded!;
+    if (!app.demo && !confirm(t("presets.compareConfirm", { a: a + 1, b: n + 1 }))) return;
+    cmp = null;
+    const r = await comparePreset(n);
+    if (r.back) return t("presets.compareBackFailed", { a: a + 1, err: r.err });
+    if (r.err) return t("presets.compareFailed", { err: r.err });
+    cmp = { title: t("presets.presetsAB", { a: a + 1, b: n + 1 }), a: t("presets.presetN", { n: a + 1 }), b: t("presets.presetN", { n: n + 1 }),
+      rows: compareRows(r.a, r.b, d, names, inPreset) };
+  });
+  let showFileDiff = $state(false);
+  // only what the file sets: a restore leaves the other registers as they are
+  const fileRows = $derived.by(() => {
+    if (!file || !showFileDiff) return [];
+    const regs = new Set(file.entries.map(([r]) => r));
+    return compareRows(stateToEntries(d), file.entries, d, names, (r) => regs.has(r));
+  });
+
   // --- file ---------------------------------------------------------------------------------
   const save = saveTuningFile;
 
@@ -58,6 +80,7 @@
     const { model, entries } = parseCfg(await f.text());
     const ok = entries.filter(([r]) => restorable(r));
     file = { name: f.name, model, entries: ok, todo: entriesToWrite(ok, d), refused: entries.length - ok.length };
+    showFileDiff = false;
     note = "";
   }
   const modelFits = $derived(!file || !file.model || file.model === d.identity.model);
@@ -105,12 +128,17 @@
         {:else}
           <button class="primary" disabled={!!busy} onclick={() => load(n)}>{t("common.load")}</button>
           <button disabled={!!busy || loaded === null} title={t("presets.copyLoadedPresetHere")} onclick={() => copy(n)}>{t("presets.copyHere")}</button>
+          <button disabled={!!busy || loaded === null} title={t("presets.compareTitle")} onclick={() => compare(n)}>{t("presets.compare")}</button>
         {/if}
         <button class="ghost danger" disabled={!!busy} onclick={() => erase(n)}>{t("presets.erase")}</button>
       </div>
     </section>
   {/each}
 </div>
+
+{#if cmp}
+  <section class="panel box"><CompareTable title={cmp.title} a={cmp.a} b={cmp.b} rows={cmp.rows} onclose={() => (cmp = null)} /></section>
+{/if}
 
 <section class="panel box">
   <h3>{t("presets.tuningAsFile")}</h3>
@@ -130,8 +158,12 @@
         <p class="muted">{t("presets.itWrittenIntoLoaded", { n: loaded !== null ? loaded + 1 : "" })}</p>
         <div class="btns">
           <button class="primary" disabled={!!busy} onclick={restore}>{t("presets.writeNValues", { n: file.todo.length })}</button>
+          <button disabled={!!busy} onclick={() => (showFileDiff = !showFileDiff)} aria-pressed={showFileDiff}>{t("presets.showDifferences")}</button>
           <button disabled={!!busy} onclick={() => (file = null)}>{t("common.cancel")}</button>
         </div>
+        {#if showFileDiff}
+          <CompareTable title={t("presets.deviceAgainstFile", { name: file.name })} a={t("presets.device")} b={t("presets.file")} rows={fileRows} />
+        {/if}
       {:else}
         <p class="muted">{t("presets.deviceAlreadyHasExactly")}</p>
       {/if}

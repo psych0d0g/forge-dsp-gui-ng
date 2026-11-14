@@ -13,8 +13,8 @@ import { t } from "./i18n/index.svelte";
 import { history, historyAttach, historyReset, historyTouch, redo, undo, type HistoryIo } from "./history.svelte";
 import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, parseKeyInfo, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
-import { DemoTransport, demoState } from "./device/demo";
-import { stateToEntries, toCfg } from "./device/tuning";
+import { DemoTransport, demoPreset, demoState } from "./device/demo";
+import { stateToEntries, toCfg, type Entry } from "./device/tuning";
 import { saveFile } from "./saveFile";
 
 /** in the bootloader (#17): the flash and EEPROM are read once on connecting (backup and identification) */
@@ -161,6 +161,8 @@ export async function disconnect() {
 }
 
 /** everything read again without the reading screen (the page stays, e.g. after a preset change) */
+/** a preset comparison loads another preset and back: the undo steps stay valid */
+let keepHistory = false;
 async function reloadQuiet() {
   const c = client;
   if (!c || app.demo) return;
@@ -172,7 +174,7 @@ async function reloadQuiet() {
     app.device = d;
     await readMaster();
     loadInNames();
-    historyReset(app.device);
+    if (!keepHistory) historyReset(app.device);
   } finally {
     app.exclusive = ex;
   }
@@ -213,6 +215,27 @@ export async function loadPreset(n: number): Promise<string> {
   }
   if (!app.demo) await reloadQuiet();
   return "";
+}
+
+/**
+ * Preset n next to the loaded one (#24): the Forge holds only the loaded preset in its DSPs, so
+ * preset n is loaded, read and the loaded one loaded again. Both as register entries.
+ * back: the loaded preset could not be loaded again (the device now runs preset n).
+ */
+export async function comparePreset(n: number): Promise<{ a: Entry[]; b: Entry[]; err: string; back: boolean }> {
+  const a = stateToEntries(app.device), was = app.device.preset.loaded;
+  if (app.demo) return { a, b: stateToEntries(demoPreset(n)), err: "", back: false };
+  if (was === null || was === n) return { a, b: a, err: "", back: false };
+  keepHistory = true;
+  try {
+    let err = await loadPreset(n).catch((e) => explain(e));
+    if (err) return { a, b: [], err, back: false };
+    const b = stateToEntries(app.device);
+    err = await loadPreset(was).catch((e) => explain(e));
+    return { a, b, err, back: !!err };
+  } finally {
+    keepHistory = false;
+  }
 }
 
 // --- outputs from the keyboard (#24) ---------------------------------------------------------------

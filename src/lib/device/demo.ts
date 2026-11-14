@@ -5,6 +5,21 @@ import { emptyState, type DeviceState } from "./model";
 
 /** A Forge 96ELN with a plausible tuning, to look at the interface without a device. */
 /** the demo device; n = 2: a second one behind the slave port (RS485 chain, #15), an ETON CORE D8 */
+/** another preset of the demo device (0-based, as preset.loaded): the same tuning with a few changes */
+export function demoPreset(n: number): DeviceState {
+  const s = demoState();
+  const k = n - (s.preset.loaded ?? 0);
+  s.preset.loaded = n;
+  if (k === 0) return s;
+  s.gain.out[0] -= 2 * k;
+  s.gain.out[1] -= 2 * k;
+  s.mute[6] = s.mute[7] = 0;
+  s.delay.out[1] += 10 * k;
+  s.biquads[1][1] = { ...s.biquads[1][1], gain: -35 - 10 * k };
+  s.biquads[3][7] = { type: 1, f: 250 * (n + 1), gain: 30, q: 1414, b: 0, flags: 128 };
+  return s;
+}
+
 export function demoState(n = 1): DeviceState {
   const s = emptyState();
   Object.assign(s.identity, { keyInfo: "DEMO-96ELN-4.0-0000000000000000-CCBYNCSA-20261112-MDD", model: "96ELN", pcb: "4.0",
