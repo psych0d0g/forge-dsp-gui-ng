@@ -14,6 +14,8 @@ import { history, historyAttach, historyReset, historyTouch, redo, undo, type Hi
 import { applyAnswer, emptyState, inputDefaultName, inputShortName, isPort, parseKeyInfo, masterOf, readDevice, STATUS_REGS, type DeviceState, type ReadProgress,
   type SdLink } from "./device";
 import { DemoTransport, demoState } from "./device/demo";
+import { stateToEntries, toCfg } from "./device/tuning";
+import { saveFile } from "./saveFile";
 
 /** in the bootloader (#17): the flash and EEPROM are read once on connecting (backup and identification) */
 export interface BootState {
@@ -163,6 +165,34 @@ export async function reload() {
   app.progress = null;
   app.status = "online";
   historyReset(app.device);
+}
+
+// --- outputs from the keyboard (#24) ---------------------------------------------------------------
+/** mute or polarity of output ch on/off */
+export function toggleOut(kind: "mute" | "phase", ch: number) {
+  const d = app.device;
+  if (app.status !== "online" || app.bootloader || ch < 1 || ch > d.mute.length) return;
+  const v = d[kind][ch - 1] ? 0 : 1;
+  d[kind][ch - 1] = v;
+  write(`${kind}.out.${ch}`, v);
+}
+let mutedBefore: number[] | null = null;
+/** all outputs muted; once more: the mutes as they were before */
+export function muteAll() {
+  const d = app.device;
+  if (app.status !== "online" || app.bootloader || !d.mute.length) return;
+  const all = d.mute.every((m) => m);
+  const want = all && mutedBefore ? mutedBefore : all ? d.mute.map(() => 0) : d.mute.map(() => 1);
+  if (!all) mutedBefore = [...d.mute];
+  want.forEach((v, i) => { if (d.mute[i] !== v) { d.mute[i] = v; write(`mute.out.${i + 1}`, v); } });
+}
+/** the loaded preset as a tuning file (.cfg of the original GUI) */
+export function saveTuningFile() {
+  const d = app.device, loaded = d.preset.loaded;
+  const cfg = toCfg(d.identity.model, stateToEntries(d), [
+    `Forge DSP ${d.identity.model}, Preset ${loaded !== null ? loaded + 1 : "?"}, ${new Date().toISOString().slice(0, 16)}`,
+    `forge-dsp-gui-ng ${__APP_VERSION__} (${__APP_COMMIT__})`]);
+  saveFile(cfg, `forge-${d.identity.model}-preset${loaded !== null ? loaded + 1 : ""}-${new Date().toISOString().slice(0, 10)}.cfg`, "text/plain");
 }
 
 // --- undo / redo (#24) ----------------------------------------------------------------------------

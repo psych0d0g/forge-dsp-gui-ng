@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t, tk, tx } from "../lib/i18n/index.svelte";
+  import { pageKeys } from "../lib/keys.svelte";
   import { tick, untrack } from "svelte";
   import { app, outName, setPoolLengths, write } from "../lib/app.svelte";
   import { channelColor } from "../lib/channelColors";
@@ -213,6 +214,39 @@
   const parseNum = (t: string) => { const v = Number(t.replace(",", ".").replace("−", "-")); return Number.isNaN(v) ? null : v; };
   const fmtHz = (f: number) => String(Math.round(f));
 
+  // keyboard (#24): F1–F8 output, F9/F10 sum A/B, ←/→ band, ↑/↓ gain (Shift ×10), F/Q its fields
+  $effect(() => {
+    pageKeys.fn = (e) => {
+      const fn = /^F(\d{1,2})$/.exec(e.key);
+      if (fn) {
+        const n = Number(fn[1]), c = n <= 8 ? n : n === 9 ? 35 : n === 10 ? 36 : 0;
+        if (!channels.includes(c)) return false;
+        ch = c; selected = null;
+        return true;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        if (!bands.length) return false;
+        const i = bands.findIndex((b) => b.n === selected), d = e.key === "ArrowRight" ? 1 : -1;
+        selected = bands[i < 0 ? (d > 0 ? 0 : bands.length - 1) : (i + d + bands.length) % bands.length].n;
+        return true;
+      }
+      const cur = selected !== null ? used.find((s) => s.n === selected) : undefined;
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && cur && typeInfo(cur.bq.type)?.gain) {
+        update(cur.n, { gain: clamp(cur.bq.gain + (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 10 : 1), lim.bqGain) });
+        return true;
+      }
+      const field = e.key.toLowerCase() === "f" ? "f" : e.key.toLowerCase() === "q" ? "w" : "";
+      if (field && cur) {
+        const el = document.querySelector<HTMLInputElement>(`.strip.sel input[data-k="${field}"]`);
+        if (!el) return false;
+        el.focus();
+        el.select();
+        return true;
+      }
+      return false;
+    };
+    return () => { pageKeys.fn = null; };
+  });
   const gainFrac = (g: number) => (g - lim.bqGain[0]) / (lim.bqGain[1] - lim.bqGain[0]);
   const fmtG = (g: number) => `${g > 0 ? "+" : g < 0 ? "−" : ""}${Math.abs(g / 10).toFixed(1)} dB`;
 </script>

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { app, connect, disconnect, history, redoChange, selectDevice, undoChange, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
+  import { app, connect, disconnect, history, muteAll, redoChange, saveTuningFile, selectDevice, toggleOut, undoChange, findSim, portChoice, sim, refreshPorts, reload, usbAvailable, type PageId } from "./lib/app.svelte";
   import PortPicker from "./components/PortPicker.svelte";
+  import Shortcuts from "./components/Shortcuts.svelte";
+  import { inField, pageKeys, shortcuts } from "./lib/keys.svelte";
   import { servedByBridge } from "./lib/transport/websocket";
   import Icon from "./components/Icon.svelte";
   import VuMeter from "./components/VuMeter.svelte";
@@ -65,15 +67,37 @@
     theme = dark ? "light" : "dark";
     try { localStorage.setItem("theme", theme); } catch { /* private mode */ }
   }
-  // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z): undo and redo of the device changes; fields keep their own undo
+  // keyboard shortcuts (lib/keys.svelte.ts, overview: components/Shortcuts.svelte); none while typing in a field
+  const PAGES = $derived(NAV.flatMap((g) => g.items.map((it) => it.id)));
   function keys(e: KeyboardEvent) {
-    if (!(e.ctrlKey || e.metaKey) || app.status !== "online") return;
-    const el = e.target as HTMLElement | null;
-    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+    if (shortcuts.open && e.key === "Escape") { shortcuts.open = false; return; }
+    if (inField(e)) return;
     const k = e.key.toLowerCase();
-    if (k === "z" && !e.shiftKey) { e.preventDefault(); undoChange(); }
-    else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redoChange(); }
+    const ready = app.status === "online" && !app.bootloader;
+    if (e.ctrlKey || e.metaKey) {
+      if (e.altKey) return;
+      if (k === "z" && !e.shiftKey && ready) { e.preventDefault(); undoChange(); }
+      else if ((k === "y" || (k === "z" && e.shiftKey)) && ready) { e.preventDefault(); redoChange(); }
+      else if (e.shiftKey && k === "l" && ready && !app.demo) { e.preventDefault(); reload(); }
+      else if (e.shiftKey && k === "s" && ready) { e.preventDefault(); saveTuningFile(); }
+      else if (e.shiftKey && k === "d" && app.status === "offline" && usbAvailable()) { e.preventDefault(); connect("usb"); }
+      else if (!e.shiftKey && /^[1-9]$/.test(e.key) && PAGES[Number(e.key) - 1] && (ready || PAGES[Number(e.key) - 1] === "console")) {
+        e.preventDefault(); open(PAGES[Number(e.key) - 1]);
+      }
+      return;
+    }
+    if (e.altKey) return;
+    if (e.key === "?") { shortcuts.open = !shortcuts.open; return; }
+    if (shortcuts.open || !ready) return;
+    if (pageKeys.fn?.(e)) { e.preventDefault(); return; }
+    if (k === "p") { shortcuts.phaseKey = true; return; }
+    if (/^[1-8]$/.test(e.key) || (e.code && /^Digit[1-8]$/.test(e.code))) {
+      const n = Number(e.code?.startsWith("Digit") ? e.code.slice(5) : e.key);
+      toggleOut(shortcuts.phaseKey ? "phase" : "mute", n);
+      e.preventDefault();
+    } else if (k === "m") { muteAll(); e.preventDefault(); }
   }
+  function keyUp(e: KeyboardEvent) { if (e.key.toLowerCase() === "p") shortcuts.phaseKey = false; }
   function open(id: PageId) {
     app.page = id;
     navOpen = false;
@@ -83,7 +107,7 @@
     : app.bootWait ? t("app.waitingBootloader") : app.device.identity.model ? `Forge DSP ${app.device.identity.model}` : t("app.noDevice"));
 </script>
 
-<svelte:window onkeydown={keys} />
+<svelte:window onkeydown={keys} onkeyup={keyUp} onblur={() => (shortcuts.phaseKey = false)} />
 <div class="shell" class:nav-open={navOpen}>
   <aside class="glass side">
     <div class="brand"><span class="logo">F</span><span>Forge DSP</span></div>
@@ -205,9 +229,12 @@
       {#if app.device.preset.loaded !== null}<span>Preset {app.device.preset.loaded + 1}</span>{/if}
       {#if app.device.temperature !== null}<span>{app.device.temperature.toFixed(1)} °C</span>{/if}
     {/if}
-    <span class="right">GUI {version} ({commit})</span>
+    <button class="link right" onclick={() => (shortcuts.open = true)}>{t("keys.title")}</button>
+    <span>GUI {version} ({commit})</span>
   </footer>
 </div>
+
+{#if shortcuts.open}<Shortcuts />{/if}
 
 {#if portChoice.ports && portChoice.resolve}
   <PortPicker ports={portChoice.ports} onpick={(p) => portChoice.resolve?.(p)} onrefresh={refreshPorts} />
@@ -254,6 +281,8 @@
 
   .status { grid-area: status; display: flex; gap: 1.25rem; padding: .3rem 1rem; font-size: .75rem; color: var(--muted); border-top: 1px solid var(--line); }
   .right { margin-left: auto; }
+  .status .link { border: 0; background: none; padding: 0; font: inherit; color: var(--muted); text-decoration: underline dotted; cursor: pointer; }
+  .status .link:hover { color: var(--fg); }
   .scrim { display: none; }
 
   @media (max-width: 52rem) {
