@@ -766,6 +766,7 @@ export const DE = {
   "overview.on": "ein",
   "overview.nEntries": "{n} Einträge",
   // presets
+  "presets.loadedInS": "Preset {n} geladen ({s} s).",
   "presets.erase": "Löschen",
   "presets.loadingPresetN": "Preset {n} wird geladen …",
   "presets.loadRefusedErr": "Laden abgelehnt: {err}",

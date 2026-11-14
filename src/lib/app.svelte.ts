@@ -70,7 +70,11 @@ function attach(t: Transport) {
     if (app.log.length > 400) app.log.splice(0, app.log.length - 400);
   });
   // events, lines without a request; those of other devices in the chain belong to them
-  client.onAnswer((a) => { if (a.device === (client?.target ?? 1)) applyAnswer(app.device, a); });
+  client.onAnswer((a) => {
+    if (a.device !== (client?.target ?? 1)) return;
+    applyAnswer(app.device, a);
+    if (a.kind === "event" && a.register === "preset.loaded") presetLoaded();
+  });
   app.transportName = t.name;
 }
 
@@ -165,6 +169,32 @@ export async function reload() {
   app.progress = null;
   app.status = "online";
   historyReset(app.device);
+}
+
+// --- preset changes (forge-dsp-firmware#66) --------------------------------------------------------
+// The Forge sends "#.1 preset.loaded=N" when a preset is completely loaded (sound back on). The GUI
+// waits for it after its own change, and reads everything again after a change on the device
+// (rotary encoder, remote, control block) as well.
+let presetWait: (() => void) | null = null;
+function presetLoaded() {
+  if (presetWait) { presetWait(); return; }
+  if (app.status === "online" && !app.exclusive && !app.demo) void reload().catch((e) => (app.error = explain(e)));
+}
+/** load preset n (0-based): no status reads meanwhile (the Forge does not answer while loading) */
+export async function loadPreset(n: number): Promise<string> {
+  if (!client) return t("common.notConnected");
+  app.exclusive = true;
+  try {
+    const done = new Promise<void>((r) => { presetWait = r; setTimeout(r, 30000); });   // older firmware: no event
+    const err = await writeOnce("preset.loaded", n);
+    if (err) return err;
+    if (!app.demo) await done;
+  } finally {
+    presetWait = null;
+    app.exclusive = false;
+  }
+  if (!app.demo) await reload();
+  return "";
 }
 
 // --- outputs from the keyboard (#24) ---------------------------------------------------------------

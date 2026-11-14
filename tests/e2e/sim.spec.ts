@@ -69,6 +69,7 @@ test("loading another preset", async ({ page }) => {
   const card2 = page.locator("section.card", { hasText: "Preset 2" });
   await card2.getByRole("button", { name: "Laden", exact: true }).click();
   await expect(card2).toContainText("geladen", { timeout: 30_000 });
+  await expect(page.getByRole("status")).toContainText(/Preset 2 geladen \(\d+\.\d s\)/, { timeout: 30_000 });  // after the event
   await nav(page, "Übersicht");
   await expect(state(page, "Preset")).toHaveText(/^2\s+von 4$/);
 });

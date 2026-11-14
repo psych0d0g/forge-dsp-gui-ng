@@ -766,6 +766,7 @@ export const EN: Record<Key, string> = {
   "overview.on": "on",
   "overview.nEntries": "{n} entries",
   // presets
+  "presets.loadedInS": "Preset {n} loaded ({s} s).",
   "presets.erase": "Erase",
   "presets.loadingPresetN": "Loading preset {n} …",
   "presets.loadRefusedErr": "Load refused: {err}",

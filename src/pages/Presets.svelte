@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from "../lib/i18n/index.svelte";
   import { saveFile } from "../lib/saveFile";
-  import { app, saveTuningFile, reload, writeOnce, writeRaw } from "../lib/app.svelte";
+  import { app, loadPreset, saveTuningFile, reload, writeOnce, writeRaw } from "../lib/app.svelte";
   import { entriesToWrite, parseCfg, restorable, stateToEntries, toCfg, type Entry } from "../lib/device";
 
   const d = $derived(app.device);
@@ -22,10 +22,10 @@
     }
   }
   const load = (n: number) => run(t("presets.loadingPresetN", { n: n + 1 }), async () => {
-    const err = await writeOnce("preset.loaded", n);
+    const t0 = performance.now();
+    const err = await loadPreset(n);
     if (err) return t("presets.loadRefusedErr", { err });
-    await sleep(2500);  // the device mutes, loads and unmutes
-    await reload();
+    return t("presets.loadedInS", { n: n + 1, s: ((performance.now() - t0) / 1000).toFixed(1) });
   });
   const copy = (n: number) => run(t("presets.copyingPresetN", { n: n + 1 }), async () => {
     if (!confirm(t("presets.copyLoadedPresetPreset", { a: loaded! + 1, b: n + 1 }))) return;
