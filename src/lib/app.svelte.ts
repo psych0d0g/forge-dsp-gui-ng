@@ -336,8 +336,40 @@ export async function afterRestart() {
 
 // keep the fast rate: a line at least every 10 s, also while the tab is hidden (no status reads then)
 if (typeof window !== "undefined") setInterval(() => {
-  if (usbBaud !== 38400 && client && !app.exclusive && Date.now() - lastTx > 10000) client.get("system.ping").catch(() => []);
+  if (usbBaud !== 38400 && client && !app.exclusive && Date.now() - lastTx > 10000)
+    client.get("system.ping").catch(() => { void recoverRate(); });
 }, 2000);
+
+/**
+ * The Forge went back to 38400 while this page still talks at USB_FAST: browsers slow the timers of
+ * a hidden tab down (Chrome to once a minute after 5 min), the keepalive misses the 30 s of the
+ * firmware. Asked when a line at USB_FAST gets no answer and when the tab is shown again: once more
+ * at USB_FAST, else at 38400, and up again.
+ */
+let recovering = false;
+export async function recoverRate() {
+  const tr = transport, c = client;
+  if (recovering || !tr?.setBaud || !c || usbBaud !== USB_FAST || app.bootloader) return;
+  recovering = true;
+  const ex = app.exclusive;
+  app.exclusive = true;
+  try {
+    const ping = (ms: number) => c.get("system.ping", { timeoutMs: ms }).then((a) => a.some((x) => x.kind === "get")).catch(() => false);
+    if (await ping(500)) return;
+    await tr.setBaud(38400);
+    usbBaud = 38400;
+    c.quietMs = 200;
+    if (await ping(800)) {
+      app.exclusive = ex;   // usbFast talks itself
+      await usbFast();
+    }
+  } finally {
+    app.exclusive = ex;
+    recovering = false;
+  }
+}
+if (typeof document !== "undefined")
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) void recoverRate(); });
 
 // --- devices in the RS485 chain (#15) ------------------------------------------------------------
 /** further Forge behind the slave port answer as .2, .3, … (firmware cmd_route.c); 1 is this one */
@@ -788,7 +820,8 @@ async function poll() {
       for (const a of await c.get(reg)) applyAnswer(app.device, a);
     }
   } catch {
-    /* a missed status read is harmless, the next one follows */
+    /* a missed status read is harmless, the next one follows; at USB_FAST it may be the rate */
+    if (usbBaud === USB_FAST) setTimeout(() => void recoverRate(), 0);
   } finally {
     polling = false;
     pollRegs = [];
